@@ -15,28 +15,39 @@ int preview_scroll_offset = 0;      // 미리보기 창 scroll offset
 
 // highlight : 현재 선택된 항목 -> files 배열에서 현재 선택된 파일의 인덱스
 // 파일 목록을 표시하는 함수 , scroll_offset : 스크롤 위치 조정 -> 시작 인덱스 조절
+// 파일 목록을 표시하는 함수 , scroll_offset : 스크롤 위치 조정 -> 시작 인덱스 조절
 void display_files(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset) {
     werase(win);    //창 지우기
     box(win, 0, 0); // 창 테두리 그리기
 
 
     // 좌측 창 최상단 바(이름, 사이즈, 수정시간) 배경색 설정
-    wattron(win, COLOR_PAIR(8)); // 헤더 배경색 설정
+    wattron(win, COLOR_PAIR(5)); // 헤더(title) 배경색 설정
     mvwprintw(win, 1, 1, "Name");
     //공백 배경색 처리
-    for(int i=2;i<37;i++)
+    for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
     mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=38;i<getmaxx(win)-20;i++)
+    for(int i=41;i<getmaxx(win)-20;i++)
         mvwprintw(win,1,i," ");
    
     mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
+
+    for(int i=getmaxx(win)-9;i<getmaxx(win)-1;i++)
+        mvwprintw(win,1,i," ");
+
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
 
     int max_display = getmaxy(win) - 3;
 
     // 파일 목록 출력
+    display_ls_file(win, files, file_count, highlight, scroll_offset,max_display); //함수최적화
+    wrefresh(win);  //창 업데이트
+}
+
+void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset, int max_display)
+{
     for (int i = 0; i < max_display && i + scroll_offset < file_count; i++) {
         int index = i + scroll_offset;
         int line_width = getmaxx(win) - 2;
@@ -70,7 +81,7 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
 
             // 파일명, 사이즈, 수정 시간 출력 위치 조정
             mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
-            mvwprintw(win, i + 2, 37, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
             mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
 
             if (index == highlight) {
@@ -80,7 +91,6 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
             }
         }
     }
-    wrefresh(win);  //창 업데이트
 }
 
 
@@ -108,7 +118,7 @@ int load_files(char *files[]) {
     return file_count;
 }
 
-// 파일 미리보기 기능
+// 파일 미리보기 기능 -> display_ls_files를 사용해서 바꾸고 안에 있는 케이스 바꿔야 됨
 void display_preview(WINDOW *preview_win, const char *filename) {
     werase(preview_win);
     box(preview_win, 0, 0);
@@ -117,46 +127,97 @@ void display_preview(WINDOW *preview_win, const char *filename) {
     if (stat(filename, &file_stat) == 0) {
 
         if (S_ISDIR(file_stat.st_mode)) {   // 디렉터리 미리보기
-            DIR *dir = opendir(filename);
+            do_dir(preview_win,filename);  
+        } else {    // 파일 미리보기 (텍스트 또는 바이너리)
+            do_file(preview_win, filename);
+        }
+    }
+    wrefresh(preview_win);
+}
+
+void do_dir(WINDOW *preview_win,const char *filename)
+{
+    DIR *dir = opendir(filename);
             if (dir) {  
                 struct dirent *entry;
                 int line_num = 1;
-                mvwprintw(preview_win, 1, 1, "[Directory Contents]");
+
+                wattron(preview_win, COLOR_PAIR(5)); // 헤더(title) 배경색 설정
+                mvwprintw(preview_win, 1, 1, "[Directory: %s]", filename);
+                wattroff(preview_win, COLOR_PAIR(5)); // 헤더 배경색 해제
+
                 while ((entry = readdir(dir)) != NULL && line_num < getmaxy(preview_win) - 2) {
                     if (entry->d_name[0] == '.' && !show_hidden_files) continue;
-                    mvwprintw(preview_win, ++line_num, 1, "%s", entry->d_name);
+
+                    // 파일의 전체 경로를 구성하여 파일 타입을 확인
+                    char full_path[PATH_MAX];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", filename, entry->d_name);
+                    struct stat entry_stat;
+                    stat(full_path, &entry_stat);
+
+                    // 파일 유형에 따라 색상 설정
+                    if (S_ISDIR(entry_stat.st_mode)) {
+                        wattron(preview_win, COLOR_PAIR(2)); // 디렉터리 색상
+                    } else if (entry_stat.st_mode & S_IXUSR) {
+                        wattron(preview_win, COLOR_PAIR(4)); // 실행 파일 색상
+                    } else {
+                        wattron(preview_win, COLOR_PAIR(3)); // 일반 파일 색상
+                    }
+
+                    // 파일 이름 출력
+                    mvwprintw(preview_win, ++line_num, 1, "  %s", entry->d_name);
+
+                    // 색상 해제
+                    wattroff(preview_win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
                 }
                 closedir(dir);
             } else {
                 mvwprintw(preview_win, 1, 1, "Cannot open directory.");
             }
-        } else {    //디렉터리 아닐 떄
-            FILE *file = fopen(filename, "r");
+}
+
+void do_file(WINDOW *preview_win,const char *filename)
+{
+    FILE *file = fopen(filename, "rb"); // 바이너리 모드로 파일 열기
             if (file != NULL) {
                 char line[PREVIEW_WIDTH - 2];
                 int line_num = 1 + preview_scroll_offset;
-                while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
-                    int line_length = strlen(line);
-                    if (line[line_length - 1] == '\n') line[line_length - 1] = '\0';
+                int bytes_read;
 
-                    int x = 1;
-                    for (int i = 0; i < line_length; i++) {
-                        if (x >= PREVIEW_WIDTH - 1) {
-                            x = 1;
-                            line_num++;
+                // 파일을 16진수로 표시하기 위한 버퍼
+                unsigned char buffer[16];
+
+                while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0 &&
+                       line_num < getmaxy(preview_win) - 2) {
+                    // 각 줄의 시작 오프셋 출력
+                    mvwprintw(preview_win, line_num, 1, "%08x  ", (line_num - 1) * 16);
+
+                    // 16진수로 각 바이트 출력
+                    for (int i = 0; i < 16; i++) {
+                        if (i < bytes_read) {
+                            mvwprintw(preview_win, line_num, 11 + i * 3, "%02x", buffer[i]);
+                        } else {
+                            mvwprintw(preview_win, line_num, 11 + i * 3, "  ");
                         }
-                        mvwaddch(preview_win, line_num, x++, line[i]);
                     }
+
+                    // 오른쪽에 ASCII 표현 출력 (출력 불가능한 문자는 '.')
+                    mvwprintw(preview_win, line_num, 60, "|");
+                    for (int i = 0; i < bytes_read; i++) {
+                        mvwaddch(preview_win, line_num, 61 + i,
+                                 (buffer[i] >= 32 && buffer[i] <= 126) ? buffer[i] : '.');
+                    }
+                    mvwprintw(preview_win, line_num, 61 + 16, "|");
+
                     line_num++;
                 }
+
                 fclose(file);
             } else {
                 mvwprintw(preview_win, 1, 1, "Cannot open file.");
             }
-        }
-    }
-    wrefresh(preview_win);
 }
+
 
 // 경로 표시
 void display_path(WINDOW *path_win) {
