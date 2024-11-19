@@ -52,6 +52,12 @@ int main() {
     int highlight = 0;
     int scroll_offset = 0;
 
+    int selected_window = 0;  // 0: 좌측 창, 1: 우측 창
+
+    // 초기 강조 표시
+    highlight_window(left_win, 1);  // 좌측 창 강조
+    highlight_window(preview_win, 0); // 우측 창 기본 테두리
+
     display_files(left_win, files, file_count, highlight, scroll_offset);
     display_preview(preview_win, files[highlight]);
     display_path(path_win);
@@ -61,24 +67,33 @@ int main() {
     int ch; //키보드 입력
     int max_display = getmaxy(left_win) - 2;
 
-    // loop
+    //추가함
+    highlight_window(left_win, 1);  // 좌측 창 활성화
+    highlight_window(preview_win, 0); // 우측 창 비활성화
+
     while ((ch = getch()) != 27) {  // ESC 키로 종료
+    if (selected_window == 0) {  // 좌측 창 선택 상태
+      
         switch (ch) {
-            case KEY_UP:    //방향키(상)
+            
+
+            case KEY_UP:
                 if (highlight > 0) highlight--;
                 if (highlight < scroll_offset) scroll_offset--;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
+                display_path(path_win);
                 break;
 
-            case KEY_DOWN:  //방향키(하)
+            case KEY_DOWN:
                 if (highlight < file_count - 1) highlight++;
-                if (highlight >= scroll_offset + max_display) scroll_offset++;
+                if (highlight >= scroll_offset + getmaxy(left_win) - 3) scroll_offset++;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
+                display_path(path_win);
                 break;
 
-            case KEY_LEFT:  //방향키(좌)
+            case KEY_LEFT:  // 상위 디렉터리로 이동
                 chdir("..");
                 for (int i = 0; i < file_count; i++) {
                     free(files[i]);
@@ -91,7 +106,7 @@ int main() {
                 display_path(path_win);
                 break;
 
-            case KEY_RIGHT: //방향키(우)
+            case KEY_RIGHT:  // 하위 디렉터리로 이동
                 if (strcmp(files[highlight], ".") != 0 && strcmp(files[highlight], "..") != 0) {
                     struct stat file_stat;
                     stat(files[highlight], &file_stat);
@@ -110,27 +125,37 @@ int main() {
                 }
                 break;
 
-            case KEY_F(1):  // F1
-                toggle_menu_panel(file_menu_panel, &menu_visible[0], "File");
+            case '\t':  // Tab 키로 우측 창으로 전환
+                selected_window = 1;
+                highlight_window(left_win, 0);  // 좌측 창 비활성화
+                highlight_window(preview_win, 1); // 우측 창 활성화
                 break;
 
-            case KEY_F(2):  // F2
-                toggle_menu_panel(edit_menu_panel, &menu_visible[1], "Edit");
-                break;
-
-            case KEY_F(3):  // F3
-                toggle_menu_panel(view_menu_panel, &menu_visible[2], "View");
-                break;
-
-            case KEY_F(4):  // F4
-                toggle_menu_panel(help_menu_panel, &menu_visible[3], "Help");
-                break;
+            // 추가 키 처리
         }
-        refresh();
-        doupdate();
+    } else if (selected_window == 1) {  // 우측 창 선택 상태
+        switch (ch) {
+            case '\t':  // Tab 키로 좌측 창으로 전환
+                selected_window = 0;
+                highlight_window(left_win, 1);  // 좌측 창 활성화
+                highlight_window(preview_win, 0); // 우측 창 비활성화
+                break;
+
+            // 우측 창에 대한 추가 키 처리
+        }
     }
 
+    // 선택된 창 테두리 강조 상태 유지
+    highlight_window(left_win, selected_window == 0);  // 좌측 창 강조 상태 업데이트
+    highlight_window(preview_win, selected_window == 1); // 우측 창 강조 상태 업데이트
 
+    refresh();
+    doupdate();
+}
+
+
+
+    
     for (int i = 0; i < file_count; i++) 
         free(files[i]);
 

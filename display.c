@@ -12,7 +12,6 @@ int show_hidden_files = 0;          // 숨김 파일 표시 여부
 int preview_scroll_offset = 0;      // 미리보기 창 scroll offset
 
 
-
 // highlight : 현재 선택된 항목 -> files 배열에서 현재 선택된 파일의 인덱스
 // 파일 목록을 표시하는 함수 , scroll_offset : 스크롤 위치 조정 -> 시작 인덱스 조절
 void display_files(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset) {
@@ -36,7 +35,14 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
 
     int max_display = getmaxy(win) - 3;
 
-    // 파일 목록 출력
+       // 파일 목록 출력
+    display_ls_file(win, files, file_count, highlight, scroll_offset,max_display); //함수최적화
+    wrefresh(win);  //창 업데이트
+}
+
+
+void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset, int max_display)
+{
     for (int i = 0; i < max_display && i + scroll_offset < file_count; i++) {
         int index = i + scroll_offset;
         int line_width = getmaxx(win) - 2;
@@ -70,7 +76,7 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
 
             // 파일명, 사이즈, 수정 시간 출력 위치 조정
             mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
-            mvwprintw(win, i + 2, 37, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
             mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
 
             if (index == highlight) {
@@ -80,9 +86,7 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
             }
         }
     }
-    wrefresh(win);  //창 업데이트
 }
-
 
 // 디렉토리 파일 목록 로드 함수
 int load_files(char *files[]) {
@@ -107,8 +111,7 @@ int load_files(char *files[]) {
 
     return file_count;
 }
-
-// 파일 미리보기 기능
+// 파일 미리보기 기능 -> display_ls_files를 사용해서 바꾸고 안에 있는 케이스 바꿔야 됨
 void display_preview(WINDOW *preview_win, const char *filename) {
     werase(preview_win);
     box(preview_win, 0, 0);
@@ -117,45 +120,79 @@ void display_preview(WINDOW *preview_win, const char *filename) {
     if (stat(filename, &file_stat) == 0) {
 
         if (S_ISDIR(file_stat.st_mode)) {   // 디렉터리 미리보기
-            DIR *dir = opendir(filename);
+            do_dir(preview_win,filename);  
+        } else {    // 파일 미리보기 (텍스트 또는 바이너리)
+            do_file(preview_win, filename);
+        }
+    }
+    wrefresh(preview_win);
+}
+
+void do_dir(WINDOW *preview_win,const char *filename)
+{
+    DIR *dir = opendir(filename);
             if (dir) {  
                 struct dirent *entry;
                 int line_num = 1;
-                mvwprintw(preview_win, 1, 1, "[Directory Contents]");
+
+                wattron(preview_win, COLOR_PAIR(5)); // 헤더(title) 배경색 설정
+                mvwprintw(preview_win, 1, 1, "[Directory: %s]", filename);
+                wattroff(preview_win, COLOR_PAIR(5)); // 헤더 배경색 해제
+
                 while ((entry = readdir(dir)) != NULL && line_num < getmaxy(preview_win) - 2) {
                     if (entry->d_name[0] == '.' && !show_hidden_files) continue;
-                    mvwprintw(preview_win, ++line_num, 1, "%s", entry->d_name);
+
+                    // 파일의 전체 경로를 구성하여 파일 타입을 확인
+                    char full_path[PATH_MAX];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", filename, entry->d_name);
+                    struct stat entry_stat;
+                    stat(full_path, &entry_stat);
+
+                    // 파일 유형에 따라 색상 설정
+                    if (S_ISDIR(entry_stat.st_mode)) {
+                        wattron(preview_win, COLOR_PAIR(2)); // 디렉터리 색상
+                    } else if (entry_stat.st_mode & S_IXUSR) {
+                        wattron(preview_win, COLOR_PAIR(4)); // 실행 파일 색상
+                    } else {
+                        wattron(preview_win, COLOR_PAIR(3)); // 일반 파일 색상
+                    }
+
+                    // 파일 이름 출력
+                    mvwprintw(preview_win, ++line_num, 1, "  %s", entry->d_name);
+
+                    // 색상 해제
+                    wattroff(preview_win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
                 }
                 closedir(dir);
             } else {
                 mvwprintw(preview_win, 1, 1, "Cannot open directory.");
             }
-        } else {    //디렉터리 아닐 떄
-            FILE *file = fopen(filename, "r");
-            if (file != NULL) {
-                char line[PREVIEW_WIDTH - 2];
-                int line_num = 1 + preview_scroll_offset;
-                while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
-                    int line_length = strlen(line);
-                    if (line[line_length - 1] == '\n') line[line_length - 1] = '\0';
+}
 
-                    int x = 1;
-                    for (int i = 0; i < line_length; i++) {
-                        if (x >= PREVIEW_WIDTH - 1) {
-                            x = 1;
-                            line_num++;
-                        }
-                        mvwaddch(preview_win, line_num, x++, line[i]);
-                    }
+void do_file(WINDOW *preview_win,const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (file != NULL) {
+        char line[PREVIEW_WIDTH - 2];
+        int line_num = 1 + preview_scroll_offset;
+        while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
+            int line_length = strlen(line);
+            if (line[line_length - 1] == '\n') line[line_length - 1] = '\0';
+
+            int x = 1;
+            for (int i = 0; i < line_length; i++) {
+                if (x >= PREVIEW_WIDTH - 1) {
+                    x = 1;
                     line_num++;
                 }
-                fclose(file);
-            } else {
-                mvwprintw(preview_win, 1, 1, "Cannot open file.");
+                mvwaddch(preview_win, line_num, x++, line[i]);
             }
+            line_num++;
         }
+        fclose(file);
+    }else {
+        mvwprintw(preview_win, 1, 1, "Cannot open file.");
     }
-    wrefresh(preview_win);
 }
 
 // 경로 표시

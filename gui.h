@@ -13,7 +13,7 @@ extern WINDOW *edit_menu_panel;
 extern WINDOW *view_menu_panel;
 extern WINDOW *help_menu_panel;
 
-
+void highlight_window(WINDOW *win, int is_selected);
 void init_ncurses(); //from gui.c
 void close_ncurses(); //from gui.c
 void toggle_menu_panel(WINDOW *menu_panel, int *visible, const char *title); //from gui.c

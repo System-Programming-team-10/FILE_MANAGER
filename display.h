@@ -10,4 +10,7 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
 int load_files(char *files[]);  //from display.c
 void display_preview(WINDOW *preview_win, const char *filename); //from display.c
 void display_path(WINDOW *path_win);  //from display.c
+void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset, int max_display);
+void do_file(WINDOW *preview_win,const char *filename);
+void do_dir(WINDOW *preview_win,const char *filename);
 #endif
