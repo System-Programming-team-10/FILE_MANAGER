@@ -52,8 +52,6 @@ int main() {
     int highlight = 0;
     int scroll_offset = 0;
 
-    int selected_window = 0;  // 0: 좌측 창, 1: 우측 창
-
     // 초기 강조 표시
     highlight_window(left_win, 1);  // 좌측 창 강조
     highlight_window(preview_win, 0); // 우측 창 기본 테두리
@@ -65,15 +63,12 @@ int main() {
     doupdate();
 
     int ch; //키보드 입력
-    int max_display = getmaxy(left_win) - 2;
 
     //추가함
     highlight_window(left_win, 1);  // 좌측 창 활성화
     highlight_window(preview_win, 0); // 우측 창 비활성화
 
     while ((ch = getch()) != 27) {  // ESC 키로 종료
-    if (selected_window == 0) {  // 좌측 창 선택 상태
-      
         switch (ch) {
             
 
@@ -126,39 +121,22 @@ int main() {
                 break;
 
             case '\t':  // Tab 키로 우측 창으로 전환
-                selected_window = 1;
                 highlight_window(left_win, 0);  // 좌측 창 비활성화
                 highlight_window(preview_win, 1); // 우측 창 활성화
-                break;
-
-            // 추가 키 처리
-        }
-    } else if (selected_window == 1) {  // 우측 창 선택 상태
-        switch (ch) {
-            case '\t':  // Tab 키로 좌측 창으로 전환
-                selected_window = 0;
+                more(preview_win, files[highlight]);
                 highlight_window(left_win, 1);  // 좌측 창 활성화
                 highlight_window(preview_win, 0); // 우측 창 비활성화
                 break;
 
-            // 우측 창에 대한 추가 키 처리
+            // 추가 키 처리
         }
-    }
-
-    // 선택된 창 테두리 강조 상태 유지
-    highlight_window(left_win, selected_window == 0);  // 좌측 창 강조 상태 업데이트
-    highlight_window(preview_win, selected_window == 1); // 우측 창 강조 상태 업데이트
-
+    highlight_window(left_win, 1);
+    
     refresh();
     doupdate();
-}
-
-
-
-    
+    }
     for (int i = 0; i < file_count; i++) 
         free(files[i]);
-
     close_ncurses();
    
     return 0;

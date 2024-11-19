@@ -168,7 +168,6 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 mvwprintw(preview_win, 1, 1, "Cannot open directory.");
             }
 }
-
 void do_file(WINDOW *preview_win,const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -193,6 +192,72 @@ void do_file(WINDOW *preview_win,const char *filename)
     }else {
         mvwprintw(preview_win, 1, 1, "Cannot open file.");
     }
+}
+
+void more(WINDOW *preview_win, const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        mvwprintw(preview_win, 1, 1, "Cannot open file.");
+        wrefresh(preview_win);
+        return;
+    }
+
+    int row, col;
+    getmaxyx(preview_win, row, col); // 창 크기 가져오기
+    col -= 2; // 좌우 여백 감안
+    row -= 2; // 상하 여백 감안
+    char line[col + 1]; // 한 줄 버퍼
+    int num_of_line = 0; // 출력된 줄 수
+    int reply = 0;
+
+    FILE *fp_tty = fopen("/dev/tty", "r"); // 사용자 입력 받기 위한 터미널 열기
+    if (fp_tty == NULL) {
+        perror("fopen");
+        fclose(file);
+        exit(1);
+    }
+
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (num_of_line == row) { // 한 화면 출력 완료
+            wrefresh(preview_win);
+            reply = see_more(fp_tty, preview_win, row, col); // 사용자 입력 처리
+            if (reply == 0) { // 종료
+                break;
+            } else if (reply == row) { // 다음 페이지
+                num_of_line = 0;
+                werase(preview_win); // 화면 지우기
+                box(preview_win, 0, 0); // 테두리 다시 그리기
+                wattron(preview_win, COLOR_PAIR(9));  // 마젠타 테두리
+                box(preview_win, 0, 0);
+                wattroff(preview_win, COLOR_PAIR(9));
+            }
+        }
+
+        // 내용 출력
+        mvwprintw(preview_win, num_of_line + 1, 1, "%s", line);
+        num_of_line++;
+    }
+
+    fclose(fp_tty);
+    fclose(file);
+    wrefresh(preview_win);
+}
+
+
+int see_more(FILE* file, WINDOW* preview_win, int row, int col)
+{
+    char c=0;
+    while((c=getc(file))!=EOF)
+    {
+        if(c=='q')
+            return 0;
+        else if(c==' ')
+            return row;
+        else
+            continue;
+    }
+    return 0;
 }
 
 // 경로 표시
