@@ -15,7 +15,6 @@ WINDOW *menu_win;
 WINDOW *path_win;
 WINDOW *left_win;
 WINDOW *preview_win;
-
 WINDOW *file_menu_panel;
 WINDOW *edit_menu_panel;
 WINDOW *view_menu_panel;
@@ -35,8 +34,11 @@ int main() {
     view_menu_panel = newwin(5, 20, 2, 43);
     help_menu_panel = newwin(5, 20, 2, 64);
 
-
-    
+    const char* filename;
+    char abs_filepath[PATH_MAX]={0};
+    char abs_dirpath[PATH_MAX]={0};
+    char destination[PATH_MAX]={0};
+    char save_filename[256]={0};
     wbkgd(menu_win, COLOR_PAIR(1));
     mvwprintw(menu_win, 0, 1, "File (F1)   Edit (F2)   View (F3)   Help (F4)");
     refresh();
@@ -68,10 +70,11 @@ int main() {
     highlight_window(left_win, 1);  // 좌측 창 활성화
     highlight_window(preview_win, 0); // 우측 창 비활성화
 
+    int file_flag; // 파일 작업 처리를 위한 flag(0: 초기화, 1: move, 2: copy)
+
     while ((ch = getch()) != 27) {  // ESC 키로 종료
         switch (ch) {
             
-
             case KEY_UP:
                 if (highlight > 0) highlight--;
                 if (highlight < scroll_offset) scroll_offset--;
@@ -120,6 +123,55 @@ int main() {
                 }
                 break;
 
+            case 'd':
+                filename = files[highlight];
+                remove_file(filename);
+                file_count = load_files(files);
+                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_preview(preview_win, files[highlight]);
+                display_path(path_win);
+                break;
+            
+            case 'm':  // Move
+                memset(abs_filepath, 0, PATH_MAX); // abs_filepath 초기화
+                file_flag = 1;
+                filename = files[highlight];
+                resolve_absolute_path(abs_filepath, filename);
+                break;
+
+            case 'c':  // Copy
+                memset(abs_filepath, 0, PATH_MAX); // abs_filepath 초기화
+                file_flag = 2;
+                filename = files[highlight];
+                strcpy(save_filename,filename);
+                resolve_absolute_path(abs_filepath, filename);
+                break;
+
+            case 'p':
+                //get destination
+                memset(abs_dirpath, 0, PATH_MAX); 
+                memset(destination, 0, PATH_MAX);
+                get_current_directory(abs_dirpath);
+                strcat(destination, abs_dirpath);
+                strcat(destination, "/");
+                strcat(destination, save_filename);
+                
+                if(strcmp(destination,abs_filepath)==0)
+                    break;
+                switch (file_flag) {
+                    case 1:  // Move
+                        move_file(destination, abs_filepath);
+                        break;
+                    case 2:  // Copys
+                        cp_file(destination, abs_filepath);
+                        break;
+                }
+                file_count = load_files(files);
+                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_preview(preview_win, files[highlight]);
+                display_path(path_win);
+                file_flag = 0; // Reset flag
+                break;
             case '\t':  // Tab 키로 우측 창으로 전환
                 highlight_window(left_win, 0);  // 좌측 창 비활성화
                 highlight_window(preview_win, 1); // 우측 창 활성화
