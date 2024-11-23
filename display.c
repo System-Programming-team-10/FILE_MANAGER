@@ -7,7 +7,7 @@
 #include <time.h>
 #include <limits.h>
 #include "display.h"
-
+#include "file.h"
 int show_hidden_files = 0;          // 숨김 파일 표시 여부
 int preview_scroll_offset = 0;      // 미리보기 창 scroll offset
 
@@ -23,18 +23,14 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     wattron(win, COLOR_PAIR(8)); // 헤더 배경색 설정
     mvwprintw(win, 1, 1, "Name");
     //공백 배경색 처리
-    for(int i=5;i<38;i++)
+    for(int i=2;i<37;i++)
         mvwprintw(win,1,i," ");
-    mvwprintw(win, 1, 38, "Size"); // Size 위치 조정
+    mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=42;i<getmaxx(win)-20;i++)
+    for(int i=38;i<getmaxx(win)-20;i++)
         mvwprintw(win,1,i," ");
    
     mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
-    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
-        mvwprintw(win,1,i," ");
-    }
-
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
 
     int max_display = getmaxy(win) - 3;
@@ -172,6 +168,7 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 mvwprintw(preview_win, 1, 1, "Cannot open directory.");
             }
 }
+
 void do_file(WINDOW *preview_win,const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -211,59 +208,76 @@ void more(WINDOW *preview_win, const char *filename)
     getmaxyx(preview_win, row, col); // 창 크기 가져오기
     col -= 2; // 좌우 여백 감안
     row -= 2; // 상하 여백 감안
-    char line[col + 1]; // 한 줄 버퍼
-    int num_of_line = 0; // 출력된 줄 수
-    int reply = 0;
-
-    FILE *fp_tty = fopen("/dev/tty", "r"); // 사용자 입력 받기 위한 터미널 열기
+    char line[col + 1];
+    long current_offset = 0; // 현재 오프셋
+    long prev_offset = 0;   // 이전 오프셋
+    FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
     if (fp_tty == NULL) {
         perror("fopen");
         fclose(file);
         exit(1);
     }
 
-    while (fgets(line, sizeof(line), file) != NULL) {
-        if (num_of_line == row) { // 한 화면 출력 완료
-            wrefresh(preview_win);
-            reply = see_more(fp_tty, preview_win, row, col); // 사용자 입력 처리
-            if (reply == 0) { // 종료
-                break;
-            } else if (reply == row) { // 다음 페이지
-                num_of_line = 0;
-                werase(preview_win); // 화면 지우기
-                box(preview_win, 0, 0); // 테두리 다시 그리기
-                wattron(preview_win, COLOR_PAIR(9));  // 마젠타 테두리
-                box(preview_win, 0, 0);
-                wattroff(preview_win, COLOR_PAIR(9));
+    while (1) {
+        // 창을 지우고 현재 줄부터 출력
+        werase(preview_win);
+        box(preview_win, 0, 0);
+        wattron(preview_win, COLOR_PAIR(9));
+        box(preview_win, 0, 0);
+        wattroff(preview_win, COLOR_PAIR(9));
+
+        // 파일 포인터를 현재 오프셋으로 이동
+        fseek(file, current_offset, SEEK_SET);
+
+        int lines_displayed = 0; // 현재 화면에 출력된 줄 수
+        int first_line_length = 0; // 첫 번째 줄의 크기 저장
+        while (lines_displayed < row && fgets(line, sizeof(line), file) != NULL) {
+            mvwprintw(preview_win, lines_displayed + 1, 1, "%s", line);
+            if (lines_displayed == 0) { // 첫 번째 줄에서 크기 계산 -> reply = 1인 경우, 첫번째 줄 지우기 위함
+                first_line_length = strlen(line);
             }
+            lines_displayed++;
         }
 
-        // 내용 출력
-        mvwprintw(preview_win, num_of_line + 1, 1, "%s", line);
-        num_of_line++;
+        // 파일 끝에 도달한 경우 종료
+        if (feof(file)) {
+            break;
+        }
+
+        wrefresh(preview_win);
+
+        // 사용자 입력 처리
+        int reply = see_more(fp_tty, preview_win, row, col);
+        if (reply == 0) { // 종료
+            break;
+        } else if (reply == row) { // 한 페이지
+            prev_offset = current_offset;
+            current_offset = ftell(file); // 파일 포인터 이동
+        } else if (reply == 1) { // 한 줄
+            current_offset = prev_offset + first_line_length; // 첫 번째 줄의 길이를 기준으로 한 줄 뒤로 이동
+            prev_offset = current_offset;
+        }
     }
 
     fclose(fp_tty);
     fclose(file);
-    wrefresh(preview_win);
 }
-
 
 int see_more(FILE* file, WINDOW* preview_win, int row, int col)
 {
-    char c=0;
-    while((c=getc(file))!=EOF)
-    {
-        if(c=='q')
+    char c = 0;
+    while ((c = getc(file)) != EOF) {
+        if (c == '\t') // 종료
             return 0;
-        else if(c==' ')
+        else if (c == ' ') // 한 페이지 출력
+            return 1;
+        else if (c == '\r') // 한 줄 출력
             return row;
         else
             continue;
     }
     return 0;
 }
-
 // 경로 표시
 void display_path(WINDOW *path_win) {
     char cwd[PATH_MAX];
@@ -273,3 +287,4 @@ void display_path(WINDOW *path_win) {
     mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
     wrefresh(path_win);
 }
+
