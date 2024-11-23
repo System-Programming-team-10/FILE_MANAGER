@@ -193,7 +193,6 @@ void do_file(WINDOW *preview_win,const char *filename)
         mvwprintw(preview_win, 1, 1, "Cannot open file.");
     }
 }
-
 void more(WINDOW *preview_win, const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -208,7 +207,7 @@ void more(WINDOW *preview_win, const char *filename)
     col -= 2; // 좌우 여백 감안
     row -= 2; // 상하 여백 감안
     char line[col + 1]; // 한 줄 버퍼
-    int num_of_line = 0; // 출력된 줄 수
+    int start_line = 0; // 윈도우에 출력할 첫 번째 줄의 인덱스
     int reply = 0;
 
     FILE *fp_tty = fopen("/dev/tty", "r"); // 사용자 입력 받기 위한 터미널 열기
@@ -218,47 +217,67 @@ void more(WINDOW *preview_win, const char *filename)
         exit(1);
     }
 
+    // 파일 전체 내용을 메모리에 로드
+    char **file_lines = malloc(10000 * sizeof(char *)); 
+    int total_lines = 0;
     while (fgets(line, sizeof(line), file) != NULL) {
-        if (num_of_line == row) { // 한 화면 출력 완료
-            wrefresh(preview_win);
-            reply = see_more(fp_tty, preview_win, row, col); // 사용자 입력 처리
-            if (reply == 0) { // 종료
-                break;
-            } else if (reply == row) { // 다음 페이지
-                num_of_line = 0;
-                werase(preview_win); // 화면 지우기
-                box(preview_win, 0, 0); // 테두리 다시 그리기
-                wattron(preview_win, COLOR_PAIR(9));  // 마젠타 테두리
-                box(preview_win, 0, 0);
-                wattroff(preview_win, COLOR_PAIR(9));
-            }
-        }
+        file_lines[total_lines] = strdup(line);
+        total_lines++;
+    }
+    fclose(file);
 
-        // 내용 출력
-        mvwprintw(preview_win, num_of_line + 1, 1, "%s", line);
-        num_of_line++;
+    while (1) {
+        // 창을 지우고 현재 줄부터 출력
+        werase(preview_win);
+        box(preview_win, 0, 0);
+        wattron(preview_win, COLOR_PAIR(9));
+        box(preview_win, 0, 0);
+        wattroff(preview_win, COLOR_PAIR(9));
+
+        for (int i = 0; i < row && (start_line + i) < total_lines; i++) {
+            mvwprintw(preview_win, i + 1, 1, "%s", file_lines[start_line + i]);
+        }
+        wrefresh(preview_win);
+
+        // 사용자 입력 처리
+        reply = see_more(fp_tty, preview_win, row, col);
+        if (reply == 0) { // 종료건조건
+            break;
+        } else if (reply == row) { // 한 페이지
+            start_line += row;
+            if (start_line >= total_lines)
+                break;
+        } else if (reply == 1) { // 한 줄
+            start_line++;
+            if (start_line >= total_lines)
+                break;
+        }
     }
 
-    fclose(fp_tty);
-    fclose(file);
-    wrefresh(preview_win);
-}
+    for (int i = 0; i < total_lines; i++) {
+        free(file_lines[i]);
+    }
+    free(file_lines);
 
+    fclose(fp_tty);
+}
 
 int see_more(FILE* file, WINDOW* preview_win, int row, int col)
 {
-    char c=0;
-    while((c=getc(file))!=EOF)
-    {
-        if(c=='q')
+    char c = 0;
+    while ((c = getc(file)) != EOF) {
+        if (c == '\t') // 종료
             return 0;
-        else if(c==' ')
+        else if (c == ' ') // 한 페이지 출력
+            return 1;
+        else if (c == '\r') // 한 줄 출력
             return row;
         else
             continue;
     }
     return 0;
 }
+
 
 // 경로 표시
 void display_path(WINDOW *path_win) {
