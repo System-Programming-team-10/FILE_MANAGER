@@ -193,6 +193,7 @@ void do_file(WINDOW *preview_win,const char *filename)
         mvwprintw(preview_win, 1, 1, "Cannot open file.");
     }
 }
+
 void more(WINDOW *preview_win, const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -206,25 +207,15 @@ void more(WINDOW *preview_win, const char *filename)
     getmaxyx(preview_win, row, col); // 창 크기 가져오기
     col -= 2; // 좌우 여백 감안
     row -= 2; // 상하 여백 감안
-    char line[col + 1]; // 한 줄 버퍼
-    int start_line = 0; // 윈도우에 출력할 첫 번째 줄의 인덱스
-    int reply = 0;
-
-    FILE *fp_tty = fopen("/dev/tty", "r"); // 사용자 입력 받기 위한 터미널 열기
+    char line[col + 1];
+    long current_offset = 0; // 현재 오프셋
+    long prev_offset = 0;   // 이전 오프셋
+    FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
     if (fp_tty == NULL) {
         perror("fopen");
         fclose(file);
         exit(1);
     }
-
-    // 파일 전체 내용을 메모리에 로드
-    char **file_lines = malloc(10000 * sizeof(char *)); 
-    int total_lines = 0;
-    while (fgets(line, sizeof(line), file) != NULL) {
-        file_lines[total_lines] = strdup(line);
-        total_lines++;
-    }
-    fclose(file);
 
     while (1) {
         // 창을 지우고 현재 줄부터 출력
@@ -234,33 +225,46 @@ void more(WINDOW *preview_win, const char *filename)
         box(preview_win, 0, 0);
         wattroff(preview_win, COLOR_PAIR(9));
 
-        for (int i = 0; i < row && (start_line + i) < total_lines; i++) {
-            mvwprintw(preview_win, i + 1, 1, "%s", file_lines[start_line + i]);
+        // 파일 포인터를 현재 오프셋으로 이동
+        fseek(file, current_offset, SEEK_SET);
+
+        int lines_displayed = 0; // 현재 화면에 출력된 줄 수
+        int first_line_length = 0; // 첫 번째 줄의 크기 저장
+        while (lines_displayed < row && fgets(line, sizeof(line), file) != NULL) {
+            mvwprintw(preview_win, lines_displayed + 1, 1, "%s", line);
+            if (lines_displayed == 0) { // 첫 번째 줄에서 크기 계산 -> reply = 1인 경우, 첫번째 줄 지우기 위함
+                first_line_length = strlen(line);
+            }
+            lines_displayed++;
         }
+
+        // 파일 끝에 도달한 경우 종료
+        if (feof(file)) {
+            break;
+        }
+
         wrefresh(preview_win);
 
         // 사용자 입력 처리
-        reply = see_more(fp_tty, preview_win, row, col);
-        if (reply == 0) { // 종료건조건
+        int reply = see_more(fp_tty, preview_win, row, col);
+        if (reply == 0) { // 종료
             break;
         } else if (reply == row) { // 한 페이지
-            start_line += row;
-            if (start_line >= total_lines)
-                break;
+            prev_offset = current_offset;
+            current_offset = ftell(file); // 파일 포인터 이동
         } else if (reply == 1) { // 한 줄
-            start_line++;
-            if (start_line >= total_lines)
-                break;
+            current_offset = prev_offset + first_line_length; // 첫 번째 줄의 길이를 기준으로 한 줄 뒤로 이동
+            prev_offset = current_offset;
         }
     }
 
-    for (int i = 0; i < total_lines; i++) {
-        free(file_lines[i]);
-    }
-    free(file_lines);
-
     fclose(fp_tty);
+    fclose(file);
 }
+
+
+
+
 
 int see_more(FILE* file, WINDOW* preview_win, int row, int col)
 {
