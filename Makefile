@@ -1,7 +1,7 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -Wall -g
-LDFLAGS = -lncurses
+LDFLAGS = -lncurses -lpanel
 
 # Source files and header files
 SRCS = main.c display.c file.c gui.c
