@@ -27,9 +27,9 @@ int main() {
     init_ncurses();
 
     menu_win = newwin(1, COLS, 0, 0);
-    path_win = newwin(2, COLS, LINES - 3, 0);
-    left_win = newwin(LINES - 6, PANEL_WIDTH, 1, 1);
-    preview_win = newwin(LINES - 6, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
+    path_win = newwin(3, COLS, LINES - 3, 0);
+    left_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
+    preview_win = newwin(LINES - 4, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
     file_menu_panel = newwin(5, 20, 2, 1);
     edit_menu_panel = newwin(5, 20, 2, 22);
     view_menu_panel = newwin(5, 20, 2, 43);
@@ -104,8 +104,7 @@ int main() {
 
         switch (ch) {
 
-            
-            
+           
             case KEY_UP:
                 if (highlight > 0) highlight--;
                 if (highlight < scroll_offset) scroll_offset--;
@@ -158,12 +157,14 @@ int main() {
                 file_flag = 2; // Copy 상태 활성화
                 memset(abs_filepath, 0, PATH_MAX);
                 filename = files[highlight];
+
                 strcpy(save_filename, filename);
                 resolve_absolute_path(abs_filepath, filename);
 
                 // Copy 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
                 wrefresh(menu_win);
+                refresh();
                 break;
 
             case 'd':  // Delete
@@ -178,6 +179,10 @@ int main() {
                // Delete 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 7, NULL); // Delete (D) 배경 시안으로 변경
                 wrefresh(menu_win);
+
+                mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 1, NULL); // Delete 기본 배경 복원
+                wrefresh(menu_win);
+                refresh();
                 break;
 
 
@@ -189,6 +194,7 @@ int main() {
 
                 mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
                 wrefresh(menu_win);
+                refresh();
                 break;
 
             case 'p':  // Paste
@@ -212,9 +218,17 @@ int main() {
                     display_path(path_win);
 
                     file_flag = 0; // Paste 완료 후 상태 초기화
+
+                    mvwchgat(menu_win,0,1,8,A_NORMAL,7,NULL);
+                    wrefresh(menu_win);
+
                     mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 1, NULL); // Copy 기본 배경 복원
                     mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 1, NULL); // Move 기본 배경 복원
+                     mvwchgat(menu_win,0,1,8,A_NORMAL,1,NULL);
                     wrefresh(menu_win);
+                    refresh();
+
+                
                 }
                 break;
 
