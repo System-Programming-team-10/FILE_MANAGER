@@ -278,10 +278,12 @@ int see_more(FILE* file, WINDOW* preview_win, int row, int col)
     }
     return 0;
 }
+
 // 경로 표시
 void display_path(WINDOW *path_win) {
     char cwd[PATH_MAX];
-    getcwd(cwd, sizeof(cwd));
+    memset(cwd, 0, PATH_MAX); 
+    get_current_directory(cwd);
     werase(path_win);
     box(path_win, 0, 0);
     mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
