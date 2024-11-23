@@ -289,4 +289,3 @@ void display_path(WINDOW *path_win) {
     mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
     wrefresh(path_win);
 }
-
