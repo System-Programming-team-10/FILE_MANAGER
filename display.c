@@ -23,14 +23,17 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     wattron(win, COLOR_PAIR(8)); // 헤더 배경색 설정
     mvwprintw(win, 1, 1, "Name");
     //공백 배경색 처리
-    for(int i=2;i<37;i++)
+    for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
     mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=38;i<getmaxx(win)-20;i++)
+    for(int i=41;i<getmaxx(win)-20;i++)
         mvwprintw(win,1,i," ");
    
     mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
+    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
+        mvwprintw(win,1,i," ");
+    }
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
 
     int max_display = getmaxy(win) - 3;
