@@ -7,21 +7,20 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
-#include <signal.h>
 #include "display.h"
 #include "file.h"
 #include "gui.h"
-
-// 시그널 블로킹/해제를 위한 함수
-void block_signals(sigset_t *oldset);
-void unblock_signals(sigset_t *oldset);
-
 int menu_visible[4] = {0, 0, 0, 0}; // 메뉴 패널 표시 유무 설정
 
 WINDOW *menu_win;
 WINDOW *path_win;
 WINDOW *left_win;
 WINDOW *preview_win;
+WINDOW *file_menu_panel;
+WINDOW *edit_menu_panel;
+WINDOW *view_menu_panel;
+WINDOW *help_menu_panel;
+
 
 int main() {
    
@@ -31,6 +30,10 @@ int main() {
     path_win = newwin(3, COLS, LINES - 3, 0);
     left_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
     preview_win = newwin(LINES - 4, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
+    file_menu_panel = newwin(5, 20, 2, 1);
+    edit_menu_panel = newwin(5, 20, 2, 22);
+    view_menu_panel = newwin(5, 20, 2, 43);
+    help_menu_panel = newwin(5, 20, 2, 64);
 
     const char* filename;
     char abs_filepath[PATH_MAX]={0};
@@ -44,6 +47,7 @@ int main() {
 
    
     wbkgd(path_win, COLOR_PAIR(1));
+
     
 
     char *files[MAX_FILES];
@@ -71,8 +75,6 @@ int main() {
 
     //WINDOW *help_win; // 도움말 창
     int help_visible=0; //help 창 표시 상태 (0 : 숨김, 1 : 표시)
-
-    sigset_t oldset;
 
     while ((ch = getch()) != 27) {  // ESC 키로 종료
 
@@ -154,25 +156,10 @@ int main() {
             case 'c':  // Copy
                 file_flag = 2; // Copy 상태 활성화
                 memset(abs_filepath, 0, PATH_MAX);
-                memset(destination, 0, PATH_MAX);
                 filename = files[highlight];
 
-                // 원본 파일 경로 설정
+                strcpy(save_filename, filename);
                 resolve_absolute_path(abs_filepath, filename);
-
-                // 대상 파일 경로 설정
-                get_current_directory(destination);
-                strcat(destination, "/");
-                strcat(destination, filename);
-
-                // 시그널 차단
-                block_signals(&oldset);
-
-                // 파일 복사 수행
-                cp_file(destination, abs_filepath);
-
-                // 시그널 차단 해제
-                unblock_signals(&oldset);
 
                 // Copy 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
@@ -180,22 +167,14 @@ int main() {
                 refresh();
                 break;
 
-
-
-
             case 'd':  // Delete
                 file_flag = 3; // Delete 상태 활성화
                 filename = files[highlight];
-
-                block_signals(&oldset); // SIGINT 차단
-
                 remove_file(filename); // 파일 삭제
                 file_count = load_files(files);
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win);
-
-                unblock_signals(&oldset);  // SIGINT 차단 해제
 
                // Delete 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 7, NULL); // Delete (D) 배경 시안으로 변경
@@ -204,7 +183,6 @@ int main() {
                 mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 1, NULL); // Delete 기본 배경 복원
                 wrefresh(menu_win);
                 refresh();
-
                 break;
 
 
@@ -213,13 +191,6 @@ int main() {
                 memset(abs_filepath, 0, PATH_MAX);
                 filename = files[highlight];
                 resolve_absolute_path(abs_filepath, filename);
-
-                block_signals(&oldset); //SIGINT 차단
-
-                move_file(destination,abs_filepath);
-
-                //SIGINT 차단 해제
-                unblock_signals(&oldset);
 
                 mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
                 wrefresh(menu_win);
@@ -326,22 +297,4 @@ int main() {
     close_ncurses();
    
     return 0;
-}
-
-// 시그널 블로킹/해제를 위한 함수
-void block_signals(sigset_t *oldset) {
-    sigset_t blockset;
-    sigemptyset(&blockset);
-    sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
-    if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
-        perror("sigprocmask - block");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void unblock_signals(sigset_t *oldset) {
-    if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
-        perror("sigprocmask - unblock");
-        exit(EXIT_FAILURE);
-    }
 }
