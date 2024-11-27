@@ -39,8 +39,27 @@ void close_ncurses() {
     delwin(left_win);
     delwin(preview_win);
     delwin(path_win);
-
+    delwin(file_menu_panel);
+    delwin(edit_menu_panel);
+    delwin(view_menu_panel);
+    delwin(help_menu_panel);
     endwin();
 
 }
 
+// 특정 메뉴 패널을 토글하는 함수
+void toggle_menu_panel(WINDOW *menu_panel, int *visible, const char *title) {
+    if (*visible) {
+        werase(menu_panel);
+        *visible = 0;
+    } else {
+        wclear(menu_panel);
+        box(menu_panel, 0, 0);
+        mvwprintw(menu_panel, 1, 1, "[%s Menu Panel]", title);
+        mvwprintw(menu_panel, 2, 1, "Option 1");
+        mvwprintw(menu_panel, 3, 1, "Option 2");
+        mvwprintw(menu_panel, 4, 1, "Option 3");
+        *visible = 1;
+    }
+    wrefresh(menu_panel);
+}
