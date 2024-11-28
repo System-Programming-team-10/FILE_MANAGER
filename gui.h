@@ -8,11 +8,6 @@ extern WINDOW *path_win;
 extern WINDOW *left_win;
 extern WINDOW *preview_win;
 
-extern WINDOW *file_menu_panel;
-extern WINDOW *edit_menu_panel;
-extern WINDOW *view_menu_panel;
-extern WINDOW *help_menu_panel;
-
 void highlight_window(WINDOW *win, int is_selected);
 void init_ncurses(); //from gui.c
 void close_ncurses(); //from gui.c

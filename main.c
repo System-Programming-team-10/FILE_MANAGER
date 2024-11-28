@@ -1,5 +1,5 @@
 #include <ncurses.h>
-#include<panel.h>
+#include <panel.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
+#include <signal.h>
 #include "display.h"
 #include "file.h"
 #include "gui.h"
@@ -16,11 +17,24 @@ WINDOW *menu_win;
 WINDOW *path_win;
 WINDOW *left_win;
 WINDOW *preview_win;
-WINDOW *file_menu_panel;
-WINDOW *edit_menu_panel;
-WINDOW *view_menu_panel;
-WINDOW *help_menu_panel;
 
+// 시그널 블로킹/해제를 위한 함수
+void block_signals(sigset_t *oldset) {
+    sigset_t blockset;
+    sigemptyset(&blockset);
+    sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
+    if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
+        perror("sigprocmask - block");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void unblock_signals(sigset_t *oldset) {
+    if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
+        perror("sigprocmask - unblock");
+        exit(EXIT_FAILURE);
+    }
+}
 
 int main() {
    
@@ -30,10 +44,6 @@ int main() {
     path_win = newwin(3, COLS, LINES - 3, 0);
     left_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
     preview_win = newwin(LINES - 4, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
-    file_menu_panel = newwin(5, 20, 2, 1);
-    edit_menu_panel = newwin(5, 20, 2, 22);
-    view_menu_panel = newwin(5, 20, 2, 43);
-    help_menu_panel = newwin(5, 20, 2, 64);
 
     const char* filename;
     char abs_filepath[PATH_MAX]={0};
@@ -45,13 +55,10 @@ int main() {
     refresh();
     wrefresh(menu_win);
 
-   
     wbkgd(path_win, COLOR_PAIR(1));
 
-    
-
     char *files[MAX_FILES];
-    int file_count = load_files(files);
+    int file_count = load_files(files, preview_win);
     int highlight = 0;
     int scroll_offset = 0;
 
@@ -61,21 +68,19 @@ int main() {
 
     display_files(left_win, files, file_count, highlight, scroll_offset);
     display_preview(preview_win, files[highlight]);
-    display_path(path_win);
+    display_path(path_win, preview_win);
     refresh();
     doupdate();
 
     int ch; //키보드 입력
 
-    //추가함
     highlight_window(left_win, 1);  // 좌측 창 활성화
     highlight_window(preview_win, 0); // 우측 창 비활성화
 
     int file_flag; // 파일 작업 처리를 위한 flag(0: 초기화, 1: move, 2: copy)
 
-    //WINDOW *help_win; // 도움말 창
     int help_visible=0; //help 창 표시 상태 (0 : 숨김, 1 : 표시)
-
+    sigset_t oldset;
     while ((ch = getch()) != 27) {  // ESC 키로 종료
 
         int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT);
@@ -110,7 +115,7 @@ int main() {
                 if (highlight < scroll_offset) scroll_offset--;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
-                display_path(path_win);
+                display_path(path_win, preview_win);
                 break;
 
             case KEY_DOWN:
@@ -118,7 +123,7 @@ int main() {
                 if (highlight >= scroll_offset + getmaxy(left_win) - 3) scroll_offset++;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
-                display_path(path_win);
+                display_path(path_win, preview_win);
                 break;
 
             case KEY_LEFT:  // 상위 디렉터리로 이동
@@ -126,12 +131,12 @@ int main() {
                 for (int i = 0; i < file_count; i++) {
                     free(files[i]);
                 }
-                file_count = load_files(files);
+                file_count = load_files(files, preview_win);
                 highlight = 0;
                 scroll_offset = 0;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
-                display_path(path_win);
+                display_path(path_win, preview_win);
                 break;
 
             case KEY_RIGHT:  // 하위 디렉터리로 이동
@@ -143,12 +148,12 @@ int main() {
                         for (int i = 0; i < file_count; i++) {
                             free(files[i]);
                         }
-                        file_count = load_files(files);
+                        file_count = load_files(files, preview_win);
                         highlight = 0;
                         scroll_offset = 0;
                         display_files(left_win, files, file_count, highlight, scroll_offset);
                         display_preview(preview_win, files[highlight]);
-                        display_path(path_win);
+                        display_path(path_win, preview_win);
                     }
                 }
                 break;
@@ -159,7 +164,7 @@ int main() {
                 filename = files[highlight];
 
                 strcpy(save_filename, filename);
-                resolve_absolute_path(abs_filepath, filename);
+                resolve_absolute_path(abs_filepath, filename, preview_win);
 
                 // Copy 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
@@ -170,11 +175,15 @@ int main() {
             case 'd':  // Delete
                 file_flag = 3; // Delete 상태 활성화
                 filename = files[highlight];
-                remove_file(filename); // 파일 삭제
-                file_count = load_files(files);
+                 // 시그널 차단
+                block_signals(&oldset);
+                remove_file(filename, preview_win); // 파일 삭제
+                // 시그널 차단 해제
+                unblock_signals(&oldset);
+                file_count = load_files(files, preview_win);
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
-                display_path(path_win);
+                display_path(path_win, preview_win);
 
                // Delete 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 7, NULL); // Delete (D) 배경 시안으로 변경
@@ -190,7 +199,8 @@ int main() {
                 file_flag = 1; // Move 상태 활성화
                 memset(abs_filepath, 0, PATH_MAX);
                 filename = files[highlight];
-                resolve_absolute_path(abs_filepath, filename);
+                strcpy(save_filename, filename);
+                resolve_absolute_path(abs_filepath, filename, preview_win);
 
                 mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
                 wrefresh(menu_win);
@@ -201,21 +211,32 @@ int main() {
                 if (file_flag != 0) {
                     memset(abs_dirpath, 0, PATH_MAX);
                     memset(destination, 0, PATH_MAX);
-                    get_current_directory(abs_dirpath);
+                    get_current_directory(abs_dirpath,PATH_MAX, preview_win);
                     strcat(destination, abs_dirpath);
                     strcat(destination, "/");
                     strcat(destination, save_filename);
-
                     if (strcmp(destination, abs_filepath) != 0) {
                         switch (file_flag) {
-                            case 1: move_file(destination, abs_filepath); break;  // Move
-                            case 2: cp_file(destination, abs_filepath); break;    // Copy
+                            case 1:
+                                // 시그널 차단
+                                block_signals(&oldset);
+                                move_file(destination, abs_filepath, preview_win); // Move
+                                // 시그널 차단 해제
+                                unblock_signals(&oldset);
+                                break; 
+                            case 2:
+                                 // 시그널 차단
+                                block_signals(&oldset);
+                                cp_file(destination, abs_filepath, preview_win); // Copy
+                                // 시그널 차단 해제
+                                unblock_signals(&oldset);
+                                break; 
                         }
                     }
-                    file_count = load_files(files);
+                    file_count = load_files(files, preview_win);
                     display_files(left_win, files, file_count, highlight, scroll_offset);
                     display_preview(preview_win, files[highlight]);
-                    display_path(path_win);
+                    display_path(path_win, preview_win);
 
                     file_flag = 0; // Paste 완료 후 상태 초기화
 
@@ -224,7 +245,7 @@ int main() {
 
                     mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 1, NULL); // Copy 기본 배경 복원
                     mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 1, NULL); // Move 기본 배경 복원
-                     mvwchgat(menu_win,0,1,8,A_NORMAL,1,NULL);
+                    mvwchgat(menu_win,0,1,8,A_NORMAL,1,NULL);
                     wrefresh(menu_win);
                     refresh();
 
@@ -268,14 +289,6 @@ int main() {
                     wrefresh(menu_win); // 메뉴 창 갱신
                 }
                 break;
-
-
-
-
-
-
-        
-
 
             case '\t':  // Tab 키로 우측 창으로 전환
                 highlight_window(left_win, 0);  // 좌측 창 비활성화

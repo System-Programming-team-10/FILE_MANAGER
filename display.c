@@ -23,14 +23,17 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     wattron(win, COLOR_PAIR(8)); // 헤더 배경색 설정
     mvwprintw(win, 1, 1, "Name");
     //공백 배경색 처리
-    for(int i=2;i<37;i++)
+    for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
     mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=38;i<getmaxx(win)-20;i++)
+    for(int i=41;i<getmaxx(win)-20;i++)
         mvwprintw(win,1,i," ");
    
     mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
+    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
+        mvwprintw(win,1,i," ");
+    }
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
 
     int max_display = getmaxy(win) - 3;
@@ -89,14 +92,15 @@ void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, 
 }
 
 // 디렉토리 파일 목록 로드 함수
-int load_files(char *files[]) {
+int load_files(char *files[],WINDOW* preview_win) {
     DIR *dir;
     struct dirent *entry;
     int file_count = 0;
 
     dir = opendir(".");
     if (dir == NULL) {
-        perror("opendir");
+        mvwprintw(preview_win, 1, 1, "Can not opendir: current working directory");
+        wrefresh(preview_win);
         return -1;
     }
 
@@ -165,7 +169,7 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 }
                 closedir(dir);
             } else {
-                mvwprintw(preview_win, 1, 1, "Cannot open directory.");
+                mvwprintw(preview_win, 1, 1, "Cannot opendir: %s", filename);
             }
 }
 
@@ -199,7 +203,7 @@ void more(WINDOW *preview_win, const char *filename)
 {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        mvwprintw(preview_win, 1, 1, "Cannot open file.");
+        mvwprintw(preview_win, 1, 1, "Cannot fopen: %s",filename);
         wrefresh(preview_win);
         return;
     }
@@ -213,7 +217,8 @@ void more(WINDOW *preview_win, const char *filename)
     long prev_offset = 0;   // 이전 오프셋
     FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
     if (fp_tty == NULL) {
-        perror("fopen");
+        mvwprintw(preview_win, 1, 1, "Cannot open: /dev/tty");
+        wrefresh(preview_win);
         fclose(file);
         exit(1);
     }
@@ -280,10 +285,10 @@ int see_more(FILE* file, WINDOW* preview_win, int row, int col)
 }
 
 // 경로 표시
-void display_path(WINDOW *path_win) {
+void display_path(WINDOW *path_win, WINDOW* preview_win) {
     char cwd[PATH_MAX];
     memset(cwd, 0, PATH_MAX); 
-    get_current_directory(cwd);
+    get_current_directory(cwd, PATH_MAX, preview_win);
     werase(path_win);
     box(path_win, 0, 0);
     mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
