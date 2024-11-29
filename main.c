@@ -11,7 +11,7 @@
 #include "display.h"
 #include "file.h"
 #include "gui.h"
-int menu_visible[4] = {0, 0, 0, 0}; // 메뉴 패널 표시 유무 설정
+
 
 WINDOW *menu_win;
 WINDOW *path_win;
@@ -108,8 +108,6 @@ int main() {
         }
 
         switch (ch) {
-
-           
             case KEY_UP:
                 if (highlight > 0) highlight--;
                 if (highlight < scroll_offset) scroll_offset--;
@@ -142,21 +140,29 @@ int main() {
             case KEY_RIGHT:  // 하위 디렉터리로 이동
                 if (strcmp(files[highlight], ".") != 0 && strcmp(files[highlight], "..") != 0) {
                     struct stat file_stat;
-                    stat(files[highlight], &file_stat);
-                    if (S_ISDIR(file_stat.st_mode)) {
-                        chdir(files[highlight]);
-                        for (int i = 0; i < file_count; i++) {
-                            free(files[i]);
+                    if (stat(files[highlight], &file_stat) == 0 && S_ISDIR(file_stat.st_mode)) { // 디렉터리인지 확인
+                        if (chdir(files[highlight]) == 0) { // 디렉터리 이동 성공
+                            for (int i = 0; i < file_count; i++) {
+                                free(files[i]);
+                            }
+                            file_count = load_files(files, preview_win);
+                            highlight = 0;
+                            scroll_offset = 0;
+
+                            display_files(left_win, files, file_count, highlight, scroll_offset);
+                            display_preview(preview_win, "."); // 현재 디렉터리 내용 표시
+                            display_path(path_win, preview_win);
+                        } else {    // 디렉터리 이동 실패하면
+                            mvwprintw(preview_win, 1, 1, "Failed to change directory.");
+                            wrefresh(preview_win);
                         }
-                        file_count = load_files(files, preview_win);
-                        highlight = 0;
-                        scroll_offset = 0;
-                        display_files(left_win, files, file_count, highlight, scroll_offset);
-                        display_preview(preview_win, files[highlight]);
-                        display_path(path_win, preview_win);
+                    } else {    //루트 디렉터리면
+                        mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
+                        wrefresh(preview_win);
                     }
                 }
                 break;
+
 
             case 'c':  // Copy
                 file_flag = 2; // Copy 상태 활성화
@@ -291,20 +297,33 @@ int main() {
                 break;
 
             case '\t':  // Tab 키로 우측 창으로 전환
-                highlight_window(left_win, 0);  // 좌측 창 비활성화
-                highlight_window(preview_win, 1); // 우측 창 활성화
-                more(preview_win, files[highlight]);
-                highlight_window(left_win, 1);  // 좌측 창 활성화
-                highlight_window(preview_win, 0); // 우측 창 비활성화
+                struct stat file_stat;
+                if (stat(files[highlight], &file_stat) == 0) { // 파일 상태 확인
+                    if (S_ISDIR(file_stat.st_mode)) { // 디렉터리인 경우 Tab 동작 무시
+                        mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
+                        wrefresh(preview_win);
+                        break;
+                    } else { // 일반 파일인 경우 more 기능 실행
+                        highlight_window(left_win, 0);  // 좌측 창 비활성화
+                        highlight_window(preview_win, 1); // 우측 창 활성화
+                        more(preview_win, files[highlight]);
+                        highlight_window(left_win, 1);  // 좌측 창 활성화
+                        highlight_window(preview_win, 0); // 우측 창 비활성화
+                    }
+                } else {
+                    mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
+                    wrefresh(preview_win);
+                }
                 break;
-
-            // 추가 키 처리
         }
+            
+
     highlight_window(left_win, 1);
     
     refresh();
     doupdate();
     }
+    
     for (int i = 0; i < file_count; i++) 
         free(files[i]);
     close_ncurses();
