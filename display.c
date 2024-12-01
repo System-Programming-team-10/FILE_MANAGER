@@ -39,7 +39,7 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     int max_display = getmaxy(win) - 3;
 
        // 파일 목록 출력
-    display_ls_file(win, files, file_count, highlight, scroll_offset,max_display); //함수최적화
+    display_ls_file(win, files, file_count, highlight, scroll_offset,max_display);
     wrefresh(win);  //창 업데이트
 }
 
@@ -91,23 +91,20 @@ void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, 
     }
 }
 
-// 디렉토리 파일 목록 로드 함수
-int load_files(char *files[],WINDOW* preview_win) {
+int load_files(char *files[], WINDOW *preview_win) {
     DIR *dir;
     struct dirent *entry;
     int file_count = 0;
 
     dir = opendir(".");
     if (dir == NULL) {
-        mvwprintw(preview_win, 1, 1, "Can not opendir: current working directory");
+        mvwprintw(preview_win, 1, 1, "Cannot open current directory.");
         wrefresh(preview_win);
         return -1;
     }
 
     while ((entry = readdir(dir)) != NULL && file_count < MAX_FILES) {
-        if (!show_hidden_files && entry->d_name[0] == '.') {
-            continue;
-        }
+        if (entry->d_name[0] == '.') continue; // 숨김 파일 제외
         files[file_count] = strdup(entry->d_name);
         file_count++;
     }
@@ -115,22 +112,82 @@ int load_files(char *files[],WINDOW* preview_win) {
 
     return file_count;
 }
-// 파일 미리보기 기능 -> display_ls_files를 사용해서 바꾸고 안에 있는 케이스 바꿔야 됨
+
 void display_preview(WINDOW *preview_win, const char *filename) {
-    werase(preview_win);
-    box(preview_win, 0, 0);
+    werase(preview_win); // 창 지우기
+    box(preview_win, 0, 0); // 테두리 그리기
 
     struct stat file_stat;
     if (stat(filename, &file_stat) == 0) {
+        if (S_ISDIR(file_stat.st_mode)) { // 선택 항목이 디렉터리인 경우
+            DIR *dir = opendir(filename);
+            if (dir) {
+                struct dirent *entry;
+                int line_num = 1; // 출력할 줄 번호
+                int is_empty = 1; // 디렉터리 비어 있음 여부 플래그
 
-        if (S_ISDIR(file_stat.st_mode)) {   // 디렉터리 미리보기
-            do_dir(preview_win,filename);  
-        } else {    // 파일 미리보기 (텍스트 또는 바이너리)
-            do_file(preview_win, filename);
+                mvwprintw(preview_win, line_num++, 2, "[Directory: %s]", filename);
+
+                while ((entry = readdir(dir)) != NULL) {
+                    if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                        is_empty = 0; // 비어 있지 않음
+                        
+                        // 파일/디렉터리 경로 구성
+                        char full_path[PATH_MAX];
+                        snprintf(full_path, sizeof(full_path), "%s/%s", filename, entry->d_name);
+
+                        // 파일 상태 확인
+                        struct stat entry_stat;
+                        if (stat(full_path, &entry_stat) == 0) {
+                            if (S_ISDIR(entry_stat.st_mode)) {
+                                wattron(preview_win, COLOR_PAIR(2)); // 디렉터리 색상
+                            } else if (entry_stat.st_mode & S_IXUSR) {
+                                wattron(preview_win, COLOR_PAIR(4)); // 실행 파일 색상
+                            } else {
+                                wattron(preview_win, COLOR_PAIR(3)); // 일반 파일 색상
+                            }
+                        }
+
+                        // 파일/디렉터리 이름 출력
+                        mvwprintw(preview_win, line_num++, 2, "  %s", entry->d_name);
+
+                        // 색상 해제
+                        wattroff(preview_win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
+                        if (line_num >= getmaxy(preview_win) - 1) { // 화면을 넘기지 않도록 제한
+                            mvwprintw(preview_win, line_num++, 2, "  ...");
+                            break;
+                        }
+                    }
+                }
+                closedir(dir);
+
+                if (is_empty) { // 디렉터리가 비어 있으면 "None" 출력
+                    mvwprintw(preview_win, line_num++, 2, "  None");
+                }
+            } else {
+                mvwprintw(preview_win, 1, 2, "Cannot open directory: %s", filename);
+                
+            }
+        } else { // 선택 항목이 파일인 경우
+            FILE *file = fopen(filename, "r");
+            if (file) {
+                char line[PREVIEW_WIDTH - 2];
+                int line_num = 1;
+                while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
+                    mvwprintw(preview_win, line_num++, 2, "%s", line);
+                }
+                fclose(file);
+            } else {
+                mvwprintw(preview_win, 1, 2, "Cannot open file: %s", filename);
+            }
         }
+    } else {
+        mvwprintw(preview_win, 1, 2, "File/Directory not found: %s", filename);
     }
     wrefresh(preview_win);
 }
+
+
 
 void do_dir(WINDOW *preview_win,const char *filename)
 {
@@ -284,13 +341,15 @@ int see_more(FILE* file, WINDOW* preview_win, int row, int col)
     return 0;
 }
 
-// 경로 표시
-void display_path(WINDOW *path_win, WINDOW* preview_win) {
+void display_path(WINDOW *path_win, WINDOW *preview_win) {
     char cwd[PATH_MAX];
-    memset(cwd, 0, PATH_MAX); 
-    get_current_directory(cwd, PATH_MAX, preview_win);
-    werase(path_win);
-    box(path_win, 0, 0);
-    mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
-    wrefresh(path_win);
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        werase(path_win);
+        box(path_win, 0, 0);
+        mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
+        wrefresh(path_win);
+    } else {
+        mvwprintw(preview_win, 1, 1, "Failed to get current path. Ensure you have access.");
+        wrefresh(preview_win);
+    }
 }

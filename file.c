@@ -19,6 +19,7 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
     if (dir == NULL) { // 디렉터리가 아니라 파일일 경우, unlink()로 삭제
         if (unlink(filepath) == -1) {
             mvwprintw(preview_win, 1, 1, "unlink fail %s", filepath);
+            sleep(2);
             wrefresh(preview_win);
         }
         return;
@@ -35,6 +36,7 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
 
         if (stat(fullpath, &info) == -1) { 
             mvwprintw(preview_win, 1, 1, "stat fail: %s", fullpath);
+            sleep(2);
             wrefresh(preview_win);
             continue;
         }
@@ -44,6 +46,7 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
         } else { 
             if (unlink(fullpath) == -1) { 
                 mvwprintw(preview_win, 1, 1, "unlink fail: %s", fullpath);
+                sleep(2);
                 wrefresh(preview_win);
                 continue;
             }
@@ -54,6 +57,7 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
 
     if (rmdir(filepath) == -1) { 
         mvwprintw(preview_win, 1, 1, "rmdir fail: %s", filepath);
+        sleep(2);
         wrefresh(preview_win);
     }
 }
@@ -69,6 +73,7 @@ void move_file(const char* destination, const char* filepath, WINDOW* preview_wi
     }
     if (rename(filepath, destination) == -1) {
         mvwprintw(preview_win, 1, 1, "rename fail: %s -> %s (Error: %s)", filepath, destination, strerror(errno));
+        sleep(2);
         wrefresh(preview_win);
     }
 }
@@ -78,6 +83,7 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 원본 파일 상태 확인
     if (stat(filepath, &src_info) == -1) {
         mvwprintw(preview_win, 1, 1, "stat fail: %s", filepath);
+        sleep(2);
         wrefresh(preview_win);
         return;
     }
@@ -104,8 +110,10 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     if (stat(destination, &dest_info) == 0) {
         if (S_ISDIR(dest_info.st_mode)) {
             mvwprintw(preview_win, 1, 1, "Error: Directory already exists at destination: %s", destination);
+            sleep(2);
         } else {
             mvwprintw(preview_win, 1, 1, "Error: File already exists at destination: %s", destination);
+            sleep(2);
         }
         wrefresh(preview_win);
         return;
