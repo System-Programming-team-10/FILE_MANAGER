@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
+#include <signal.h>
 #include "gui.h"
 #include "display.h"
 #include "file.h"
