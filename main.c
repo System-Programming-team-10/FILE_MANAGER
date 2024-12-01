@@ -24,14 +24,16 @@ void block_signals(sigset_t *oldset) {
     sigemptyset(&blockset);
     sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
     if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
-        perror("sigprocmask - block");
+        //perror("sigprocmask - block");
+        display_error(menu_win,"sigprocmask - block");
         exit(EXIT_FAILURE);
     }
 }
 
 void unblock_signals(sigset_t *oldset) {
     if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
-        perror("sigprocmask - unblock");
+        //perror("sigprocmask - unblock");
+        display_error(menu_win,"sigprocmask - unblock");
         exit(EXIT_FAILURE);
     }
 }
@@ -82,6 +84,25 @@ int main() {
     int help_visible=0; //help 창 표시 상태 (0 : 숨김, 1 : 표시)
     sigset_t oldset;
     while ((ch = getch()) != 27) {  // ESC 키로 종료
+
+        if (help_visible) {
+            // Help 창이 열려 있는 상태에서 입력이 들어오면 Help 창을 닫음
+            werase(preview_win); // 기존 내용 지우기
+            box(preview_win, 0, 0); // 테두리 그리기
+            if (file_count > 0) {
+                display_preview(preview_win, files[highlight]); // 선택된 파일 내용 출력
+            } else {
+                mvwprintw(preview_win, 1, 2, "No file selected.");
+            }
+            wrefresh(preview_win); // 미리보기 창 갱신
+            help_visible = 0;
+    
+            // Help 버튼 색상 원래대로 복원
+            mvwchgat(menu_win, 0, 47, 8, A_NORMAL, 1, NULL); // Help 기본 배경 복원
+            wrefresh(menu_win); // 메뉴 창 갱신
+    
+            continue; // 입력 처리를 종료하고 다음 입력 대기
+        }
 
         int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT);
         int is_paste_key = (ch == 'p');
@@ -256,6 +277,10 @@ int main() {
                     refresh();
 
                 
+                } else {
+                    display_error(menu_win, "No file to paste");  // 에러 메시지 출력
+                
+                    break;
                 }
                 break;
 
@@ -300,7 +325,8 @@ int main() {
                 struct stat file_stat;
                 if (stat(files[highlight], &file_stat) == 0) { // 파일 상태 확인
                     if (S_ISDIR(file_stat.st_mode)) { // 디렉터리인 경우 Tab 동작 무시
-                        mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
+                        display_error(menu_win,"Error : Cannot open directories with Tab.");
+                        //mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
                         wrefresh(preview_win);
                         break;
                     } else { // 일반 파일인 경우 more 기능 실행
@@ -311,7 +337,8 @@ int main() {
                         highlight_window(preview_win, 0); // 우측 창 비활성화
                     }
                 } else {
-                    mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
+                    display_error(menu_win,"Error : accwssing file : %s",files[highlight]);
+                    //mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
                     wrefresh(preview_win);
                 }
                 break;
