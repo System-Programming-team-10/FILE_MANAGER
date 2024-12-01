@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +8,8 @@
 #include <limits.h> // For PATH_MAX
 #include <errno.h>
 #include <ncurses.h>
+#include "file.h"
+#include "display.h"
 
 // 파일 또는 디렉터리를 삭제하는 함수
 void remove_file(const char* filepath, WINDOW* preview_win) {
@@ -19,7 +20,6 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
     if (dir == NULL) { // 디렉터리가 아니라 파일일 경우, unlink()로 삭제
         if (unlink(filepath) == -1) {
             mvwprintw(preview_win, 1, 1, "unlink fail %s", filepath);
-            sleep(2);
             wrefresh(preview_win);
         }
         return;
@@ -36,7 +36,6 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
 
         if (stat(fullpath, &info) == -1) { 
             mvwprintw(preview_win, 1, 1, "stat fail: %s", fullpath);
-            sleep(2);
             wrefresh(preview_win);
             continue;
         }
@@ -46,7 +45,6 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
         } else { 
             if (unlink(fullpath) == -1) { 
                 mvwprintw(preview_win, 1, 1, "unlink fail: %s", fullpath);
-                sleep(2);
                 wrefresh(preview_win);
                 continue;
             }
@@ -57,7 +55,6 @@ void remove_file(const char* filepath, WINDOW* preview_win) {
 
     if (rmdir(filepath) == -1) { 
         mvwprintw(preview_win, 1, 1, "rmdir fail: %s", filepath);
-        sleep(2);
         wrefresh(preview_win);
     }
 }
@@ -72,8 +69,10 @@ void move_file(const char* destination, const char* filepath, WINDOW* preview_wi
         return;
     }
     if (rename(filepath, destination) == -1) {
-        mvwprintw(preview_win, 1, 1, "rename fail: %s -> %s (Error: %s)", filepath, destination, strerror(errno));
-        sleep(2);
+
+        display_error(menu_win,"rename fail : %s -> %s (Erorr : %s)",filepath,destination,strerror(errno));
+       // mvwprintw(preview_win, 1, 1, "rename fail: %s -> %s (Error: %s)", filepath, destination, strerror(errno));
+
         wrefresh(preview_win);
     }
 }
@@ -82,26 +81,37 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
 
     // 원본 파일 상태 확인
     if (stat(filepath, &src_info) == -1) {
-        mvwprintw(preview_win, 1, 1, "stat fail: %s", filepath);
-        sleep(2);
+        display_error(menu_win, "stat fail: %s", filepath);
         wrefresh(preview_win);
         return;
     }
 
-    size_t parent_len = strlen(filepath);
-    if (strncmp(filepath, destination, parent_len) == 0) {
-        /*
-        복사 대상이 원본 디렉터리의 하위 경로라면,
-        복사된 디렉터리 내에 다시 대상 디렉터리가 포함되므로, 끝없이 새로운 복사 대상이 생성되고 재귀 호출이 무한히 반복
-        */
-        mvwprintw(preview_win, 1, 1, "destination이 filepath의 하위 디렉터리입니다.");
+    char real_src[PATH_MAX];
+    char real_dest[PATH_MAX];
+
+    // 원본과 대상의 절대 경로 가져오기
+    if (realpath(filepath, real_src) == NULL) {
+        display_error(menu_win, "Error resolving source path: %s", filepath);
+        wrefresh(preview_win);
+        return;
+    }
+    if (realpath(destination, real_dest) == NULL) {
+        display_error(menu_win, "Error resolving destination path: %s", destination);
+        wrefresh(preview_win);
+        return;
+    }
+
+    // 복사 대상이 원본 디렉터리의 하위 경로인지 확인
+    size_t src_len = strlen(real_src);
+    if (strncmp(real_dest, real_src, src_len) == 0 && real_dest[src_len] == '/') {
+        display_error(menu_win, "Destination is a subdirectory of the source directory.");
         wrefresh(preview_win);
         return;
     }
 
     // 동일한 파일인지 확인
     if (strcmp(filepath, destination) == 0) {
-        mvwprintw(preview_win, 1, 1, "Source and destination are the same: %s", filepath);
+        display_error(menu_win, "Source and destination are the same: %s", filepath);
         wrefresh(preview_win);
         return;
     }
@@ -109,11 +119,9 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 복사 대상에 동일한 파일이 존재하는지 확인
     if (stat(destination, &dest_info) == 0) {
         if (S_ISDIR(dest_info.st_mode)) {
-            mvwprintw(preview_win, 1, 1, "Error: Directory already exists at destination: %s", destination);
-            sleep(2);
+            display_error(menu_win, "Error: Directory already exists at destination");
         } else {
-            mvwprintw(preview_win, 1, 1, "Error: File already exists at destination: %s", destination);
-            sleep(2);
+            display_error(menu_win, "Error: File already exists at destination");
         }
         wrefresh(preview_win);
         return;
@@ -123,14 +131,14 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     if (S_ISDIR(src_info.st_mode)) {
         DIR* dir = opendir(filepath);
         if (dir == NULL) {
-            mvwprintw(preview_win, 1, 1, "Can not open directory: %s", filepath);
+            display_error(menu_win, "Cannot open directory: %s", filepath);
             wrefresh(preview_win);
             return;
         }
 
         // 복사 대상 디렉터리 생성
         if (mkdir(destination, src_info.st_mode & 0777) == -1) {
-            mvwprintw(preview_win, 1, 1, "Can not create directory: %s", destination);
+            display_error(menu_win, "Cannot create directory: %s", destination);
             wrefresh(preview_win);
             closedir(dir);
             return;
@@ -143,7 +151,7 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
             }
 
             // 하위 디렉터리 및 파일 경로 생성
-            char srcPath[1024], destPath[1024];
+            char srcPath[PATH_MAX], destPath[PATH_MAX];
             snprintf(srcPath, sizeof(srcPath), "%s/%s", filepath, entry->d_name);
             snprintf(destPath, sizeof(destPath), "%s/%s", destination, entry->d_name);
 
@@ -157,7 +165,7 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
         // 원본 파일 열기
         src = fopen(filepath, "rb");
         if (src == NULL) {
-            mvwprintw(preview_win, 1, 1, "Can not open source file: %s", filepath);
+            display_error(menu_win, "Cannot open source file: %s", filepath);
             wrefresh(preview_win);
             return;
         }
@@ -165,7 +173,7 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
         // 대상 파일 열기
         dest = fopen(destination, "wb");
         if (dest == NULL) {
-            mvwprintw(preview_win, 1, 1, "Can not open destination file: %s", destination);
+            display_error(menu_win, "Cannot open destination file: %s", destination);
             wrefresh(preview_win);
             fclose(src);
             return;
@@ -247,6 +255,8 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         //error// 버퍼가 충분하지 않음
     }
     memcpy(buf, ptr, len);
+
+    chdir(buf);
 }
 
 void resolve_absolute_path(char* absolute_path, const char* filename, WINDOW* preview_win) {

@@ -1,5 +1,4 @@
 #include <ncurses.h>
-#include <panel.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -7,326 +6,321 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
-#include <signal.h>
+#include "gui.h"
 #include "display.h"
 #include "file.h"
-#include "gui.h"
 
 
-WINDOW *menu_win;
-WINDOW *path_win;
-WINDOW *left_win;
-WINDOW *preview_win;
+void display_error(WINDOW *menu_win, const char *format, ...) {
 
-// 시그널 블로킹/해제를 위한 함수
-void block_signals(sigset_t *oldset) {
-    sigset_t blockset;
-    sigemptyset(&blockset);
-    sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
-    if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
-        perror("sigprocmask - block");
-        exit(EXIT_FAILURE);
-    }
-}
+    static int error_displaying = 0;  
+    if (error_displaying) return;
 
-void unblock_signals(sigset_t *oldset) {
-    if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
-        perror("sigprocmask - unblock");
-        exit(EXIT_FAILURE);
-    }
-}
+    error_displaying = 1;
 
-int main() {
-   
-    init_ncurses();
+    char buffer[256];   //가변 인자로 문자열 받아서 저장하는 buffer
+    va_list args;   //가변 인자 처리하기 위한 pointer, 가변 인자 목록에서 현재 위치 인자 가져옴
+    va_start(args, format); //va_list 초기화
+    vsnprintf(buffer, sizeof(buffer), format, args);    //가변ㅇ 인자 이용하여 문자열  처리하고 버퍼에 저장
+    va_end(args);   // 가변 인자 처리 끝내고 va_list 정리
 
-    menu_win = newwin(1, COLS, 0, 0);
-    path_win = newwin(3, COLS, LINES - 3, 0);
-    left_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
-    preview_win = newwin(LINES - 4, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
+    int menu_width = getmaxx(menu_win);
+    int msg_len = strlen(buffer);
+    int start_x = menu_width - msg_len - 2;
+    if (start_x < 0) start_x = 0;  // 메시지가 잘리지 않도록 보정
 
-    const char* filename;
-    char abs_filepath[PATH_MAX]={0};
-    char abs_dirpath[PATH_MAX]={0};
-    char destination[PATH_MAX]={0};
-    char save_filename[256]={0};
-    wbkgd(menu_win, COLOR_PAIR(1));
-    mvwprintw(menu_win, 0, 1, "Copy (C)   Delete(D)   Move (M)   Paste (p)   Help (H)");
-    refresh();
+    wattron(menu_win, COLOR_PAIR(7));
+    mvwprintw(menu_win, 0, start_x, "%s", buffer);
+    wattroff(menu_win, COLOR_PAIR(7));
     wrefresh(menu_win);
 
-    wbkgd(path_win, COLOR_PAIR(1));
+    napms(2000);    // 2초 대기
+    mvwprintw(menu_win, 0, start_x, "%-*s", msg_len, "");  // 메시지 지우기
+    wrefresh(menu_win);
 
-    char *files[MAX_FILES];
-    int file_count = load_files(files, preview_win);
-    int highlight = 0;
-    int scroll_offset = 0;
+    error_displaying = 0;
+}
 
-    // 초기 강조 표시
-    highlight_window(left_win, 1);  // 좌측 창 강조
-    highlight_window(preview_win, 0); // 우측 창 기본 테두리
-
-    display_files(left_win, files, file_count, highlight, scroll_offset);
-    display_preview(preview_win, files[highlight]);
-    display_path(path_win, preview_win);
-    refresh();
-    doupdate();
-
-    int ch; //키보드 입력
-
-    highlight_window(left_win, 1);  // 좌측 창 활성화
-    highlight_window(preview_win, 0); // 우측 창 비활성화
-
-    int file_flag; // 파일 작업 처리를 위한 flag(0: 초기화, 1: move, 2: copy)
-
-    int help_visible=0; //help 창 표시 상태 (0 : 숨김, 1 : 표시)
-    sigset_t oldset;
-    while ((ch = getch()) != 27) {  // ESC 키로 종료
-
-        int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT);
-        int is_paste_key = (ch == 'p');
-
-        // Copy 상태 해제 조건
-        if (file_flag == 2 && !is_arrow_key && !is_paste_key && ch != 'c') {
-            file_flag = 0;
-            mvwchgat(menu_win, 0, 1, 9, A_NORMAL, 1, NULL);  // Copy (C) 기본 배경 복원
-            wrefresh(menu_win);
-        }
-
-        // Move 상태 해제 조건
-        if (file_flag == 1 && !is_arrow_key && !is_paste_key && ch != 'm') {
-            file_flag = 0;
-            mvwchgat(menu_win, 0, 21, 9, A_NORMAL, 1, NULL);  // Move (M) 기본 배경 복원
-            wrefresh(menu_win);
-        }
-
-        // Delete 상태 해제 조건
-        if (file_flag == 3 && !is_arrow_key && ch != 'd') {
-            file_flag = 0;
-            mvwchgat(menu_win, 0, 11, 9, A_NORMAL, 1, NULL);  // Delete (D) 기본 배경 복원
-            wrefresh(menu_win);
-        }
-
-        switch (ch) {
-            case KEY_UP:
-                if (highlight > 0) highlight--;
-                if (highlight < scroll_offset) scroll_offset--;
-                display_files(left_win, files, file_count, highlight, scroll_offset);
-                display_preview(preview_win, files[highlight]);
-                display_path(path_win, preview_win);
-                break;
-
-            case KEY_DOWN:
-                if (highlight < file_count - 1) highlight++;
-                if (highlight >= scroll_offset + getmaxy(left_win) - 3) scroll_offset++;
-                display_files(left_win, files, file_count, highlight, scroll_offset);
-                display_preview(preview_win, files[highlight]);
-                display_path(path_win, preview_win);
-                break;
-
-            case KEY_LEFT:  // 상위 디렉터리로 이동
-                chdir("..");
-                for (int i = 0; i < file_count; i++) {
-                    free(files[i]);
-                }
-                file_count = load_files(files, preview_win);
-                highlight = 0;
-                scroll_offset = 0;
-                display_files(left_win, files, file_count, highlight, scroll_offset);
-                display_preview(preview_win, files[highlight]);
-                display_path(path_win, preview_win);
-                break;
-
-            case KEY_RIGHT:  // 하위 디렉터리로 이동
-                if (strcmp(files[highlight], ".") != 0 && strcmp(files[highlight], "..") != 0) {
-                    struct stat file_stat;
-                    if (stat(files[highlight], &file_stat) == 0 && S_ISDIR(file_stat.st_mode)) { // 디렉터리인지 확인
-                        if (chdir(files[highlight]) == 0) { // 디렉터리 이동 성공
-                            for (int i = 0; i < file_count; i++) {
-                                free(files[i]);
-                            }
-                            file_count = load_files(files, preview_win);
-                            highlight = 0;
-                            scroll_offset = 0;
-
-                            display_files(left_win, files, file_count, highlight, scroll_offset);
-                            display_preview(preview_win, "."); // 현재 디렉터리 내용 표시
-                            display_path(path_win, preview_win);
-                        } else {    // 디렉터리 이동 실패하면
-                            mvwprintw(preview_win, 1, 1, "Failed to change directory.");
-                            wrefresh(preview_win);
-                        }
-                    } else {    //루트 디렉터리면
-                        mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
-                        wrefresh(preview_win);
-                    }
-                }
-                break;
+// highlight : 현재 선택된 항목 -> files 배열에서 현재 선택된 파일의 인덱스
+// 파일 목록을 표시하는 함수 , scroll_offset : 스크롤 위치 조정 -> 시작 인덱스 조절
+void display_files(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset) {
+    werase(win);    //창 지우기
+    box(win, 0, 0); // 창 테두리 그리기
 
 
-            case 'c':  // Copy
-                file_flag = 2; // Copy 상태 활성화
-                memset(abs_filepath, 0, PATH_MAX);
-                filename = files[highlight];
-
-                strcpy(save_filename, filename);
-                resolve_absolute_path(abs_filepath, filename, preview_win);
-
-                // Copy 메뉴 배경색 변경
-                mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
-                wrefresh(menu_win);
-                refresh();
-                break;
-
-            case 'd':  // Delete
-                file_flag = 3; // Delete 상태 활성화
-                filename = files[highlight];
-                 // 시그널 차단
-                block_signals(&oldset);
-                remove_file(filename, preview_win); // 파일 삭제
-                // 시그널 차단 해제
-                unblock_signals(&oldset);
-                file_count = load_files(files, preview_win);
-                display_files(left_win, files, file_count, highlight, scroll_offset);
-                display_preview(preview_win, files[highlight]);
-                display_path(path_win, preview_win);
-
-               // Delete 메뉴 배경색 변경
-                mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 7, NULL); // Delete (D) 배경 시안으로 변경
-                wrefresh(menu_win);
-
-                mvwchgat(menu_win, 0, 12, 9, A_NORMAL, 1, NULL); // Delete 기본 배경 복원
-                wrefresh(menu_win);
-                refresh();
-                break;
-
-
-            case 'm':  // Move
-                file_flag = 1; // Move 상태 활성화
-                memset(abs_filepath, 0, PATH_MAX);
-                filename = files[highlight];
-                strcpy(save_filename, filename);
-                resolve_absolute_path(abs_filepath, filename, preview_win);
-
-                mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
-                wrefresh(menu_win);
-                refresh();
-                break;
-
-            case 'p':  // Paste
-                if (file_flag != 0) {
-                    memset(abs_dirpath, 0, PATH_MAX);
-                    memset(destination, 0, PATH_MAX);
-                    get_current_directory(abs_dirpath,PATH_MAX, preview_win);
-                    strcat(destination, abs_dirpath);
-                    strcat(destination, "/");
-                    strcat(destination, save_filename);
-                    if (strcmp(destination, abs_filepath) != 0) {
-                        switch (file_flag) {
-                            case 1:
-                                // 시그널 차단
-                                block_signals(&oldset);
-                                move_file(destination, abs_filepath, preview_win); // Move
-                                // 시그널 차단 해제
-                                unblock_signals(&oldset);
-                                break; 
-                            case 2:
-                                 // 시그널 차단
-                                block_signals(&oldset);
-                                cp_file(destination, abs_filepath, preview_win); // Copy
-                                // 시그널 차단 해제
-                                unblock_signals(&oldset);
-                                break; 
-                        }
-                    }
-                    file_count = load_files(files, preview_win);
-                    display_files(left_win, files, file_count, highlight, scroll_offset);
-                    display_preview(preview_win, files[highlight]);
-                    display_path(path_win, preview_win);
-
-                    file_flag = 0; // Paste 완료 후 상태 초기화
-
-                    mvwchgat(menu_win,0,1,8,A_NORMAL,7,NULL);
-                    wrefresh(menu_win);
-
-                    mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 1, NULL); // Copy 기본 배경 복원
-                    mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 1, NULL); // Move 기본 배경 복원
-                    mvwchgat(menu_win,0,1,8,A_NORMAL,1,NULL);
-                    wrefresh(menu_win);
-                    refresh();
-
-                
-                }
-                break;
-
-            case 'h': // Help 창 토글
-                if (!help_visible) {
-                    // 미리보기 창에 Help 내용 출력
-                    werase(preview_win); // 기존 내용 지우기
-                    box(preview_win, 0, 0); // 테두리 그리기
-                    mvwprintw(preview_win, 1, 2, " Help Menu ");
-                    mvwprintw(preview_win, 3, 2, "This is the help screen for your File Manager.");
-                    mvwprintw(preview_win, 5, 2, "Key Commands:");
-                    mvwprintw(preview_win, 6, 4, "C: Copy the selected file");
-                    mvwprintw(preview_win, 7, 4, "D: Delete the selected file");
-                    mvwprintw(preview_win, 8, 4, "M: Move the selected file");
-                    mvwprintw(preview_win, 9, 4, "P: Paste the copied/moved file");
-                    mvwprintw(preview_win, 10, 4, "Arrow Keys: Navigate through the files");
-                    mvwprintw(preview_win, 11, 4, "H: Toggle this Help menu");
-                    mvwprintw(preview_win, 12, 4, "ESC: Exit the program");
-                    wrefresh(preview_win); // 미리보기 창 갱신
-                    help_visible = 1;
-
-                    mvwchgat(menu_win, 0, 47, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
-                    wrefresh(menu_win); // 메뉴 창 갱신
-                } else {
-                    // 미리보기 창 원래 내용 복원
-                    werase(preview_win); // 기존 내용 지우기
-                    box(preview_win, 0, 0); // 테두리 그리기
-                    if (file_count > 0) {
-                        display_preview(preview_win, files[highlight]); // 선택된 파일 내용 출력
-                    } else {
-                        mvwprintw(preview_win, 1, 2, "No file selected.");
-                    }
-                    wrefresh(preview_win); // 미리보기 창 갱신
-                    help_visible = 0;
-
-                    mvwchgat(menu_win, 0, 47, 8, A_NORMAL, 1, NULL); // Move 기본 배경 복원
-                    wrefresh(menu_win); // 메뉴 창 갱신
-                }
-                break;
-
-            case '\t':  // Tab 키로 우측 창으로 전환
-                struct stat file_stat;
-                if (stat(files[highlight], &file_stat) == 0) { // 파일 상태 확인
-                    if (S_ISDIR(file_stat.st_mode)) { // 디렉터리인 경우 Tab 동작 무시
-                        mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
-                        wrefresh(preview_win);
-                        break;
-                    } else { // 일반 파일인 경우 more 기능 실행
-                        highlight_window(left_win, 0);  // 좌측 창 비활성화
-                        highlight_window(preview_win, 1); // 우측 창 활성화
-                        more(preview_win, files[highlight]);
-                        highlight_window(left_win, 1);  // 좌측 창 활성화
-                        highlight_window(preview_win, 0); // 우측 창 비활성화
-                    }
-                } else {
-                    mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
-                    wrefresh(preview_win);
-                }
-                break;
-        }
-            
-
-    highlight_window(left_win, 1);
-    
-    refresh();
-    doupdate();
-    }
-    
-    for (int i = 0; i < file_count; i++) 
-        free(files[i]);
-    close_ncurses();
+    // 좌측 창 최상단 바(이름, 사이즈, 수정시간) 배경색 설정
+    wattron(win, COLOR_PAIR(8)); // 헤더 배경색 설정
+    mvwprintw(win, 1, 1, "Name");
+    //공백 배경색 처리
+    for(int i=5;i<37;i++)
+        mvwprintw(win,1,i," ");
+    mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
+    //공백 배경색 처리
+    for(int i=41;i<getmaxx(win)-20;i++)
+        mvwprintw(win,1,i," ");
    
+    mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
+    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
+        mvwprintw(win,1,i," ");
+    }
+    wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
+
+    int max_display = getmaxy(win) - 3;
+
+       // 파일 목록 출력
+    display_ls_file(win, files, file_count, highlight, scroll_offset,max_display); //함수최적화
+    wrefresh(win);  //창 업데이트
+}
+
+
+void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset, int max_display)
+{
+    for (int i = 0; i < max_display && i + scroll_offset < file_count; i++) {
+        int index = i + scroll_offset;
+        int line_width = getmaxx(win) - 2;
+
+        // 선택된 항목의 배경색을 변경
+        if (index == highlight) {
+            wattron(win, COLOR_PAIR(7));
+            for (int j = 0; j < line_width; j++) {
+                mvwaddch(win, i + 2, j + 1, ' ');
+            }
+            wattroff(win, COLOR_PAIR(7));
+        }
+
+        struct stat file_stat;
+        //파일 정보 가져오기
+        if (stat(files[index], &file_stat) == 0) {
+            char mod_time[20];
+            strftime(mod_time, 20, "%Y-%m-%d %H:%M", localtime(&file_stat.st_mtime));
+
+            if (index == highlight) {
+                wattron(win, COLOR_PAIR(7));    //선택 항목 배경색 변경
+            } else {
+                if (S_ISDIR(file_stat.st_mode)) {
+                    wattron(win, COLOR_PAIR(2));    // 디렉터리 색상
+                } else if (file_stat.st_mode & S_IXUSR) {
+                    wattron(win, COLOR_PAIR(4));    // binary file 색상
+                } else {
+                    wattron(win, COLOR_PAIR(3));    // 일반 파일 색상
+                }
+            }
+
+            // 파일명, 사이즈, 수정 시간 출력 위치 조정
+            mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
+            mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
+
+            if (index == highlight) {
+                wattroff(win, COLOR_PAIR(7));
+            } else {
+                wattroff(win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
+            }
+        }
+    }
+}
+
+// 디렉토리 파일 목록 로드 함수
+int load_files(char *files[],WINDOW* preview_win) {
+    DIR *dir;
+    struct dirent *entry;
+    int file_count = 0;
+
+    dir = opendir(".");
+    if (dir == NULL) {
+        mvwprintw(preview_win, 1, 1, "Can not opendir: current working directory");
+        wrefresh(preview_win);
+        return -1;
+    }
+
+    while ((entry = readdir(dir)) != NULL && file_count < MAX_FILES) {
+        if ( entry->d_name[0] == '.') {
+            continue;
+        }
+        files[file_count] = strdup(entry->d_name);
+        file_count++;
+    }
+    closedir(dir);
+
+    return file_count;
+}
+// 파일 미리보기 기능 -> display_ls_files를 사용해서 바꾸고 안에 있는 케이스 바꿔야 됨
+void display_preview(WINDOW *preview_win, const char *filename) {
+    werase(preview_win);
+    box(preview_win, 0, 0);
+
+    struct stat file_stat;
+    if (stat(filename, &file_stat) == 0) {
+
+        if (S_ISDIR(file_stat.st_mode)) {   // 디렉터리 미리보기
+            do_dir(preview_win,filename);  
+        } else {    // 파일 미리보기 (텍스트 또는 바이너리)
+            do_file(preview_win, filename);
+        }
+    }
+    wrefresh(preview_win);
+}
+
+void do_dir(WINDOW *preview_win,const char *filename)
+{
+    DIR *dir = opendir(filename);
+            if (dir) {  
+                struct dirent *entry;
+                int line_num = 1;
+
+                wattron(preview_win, COLOR_PAIR(5)); // 헤더(title) 배경색 설정
+                mvwprintw(preview_win, 1, 1, "[Directory: %s]", filename);
+                wattroff(preview_win, COLOR_PAIR(5)); // 헤더 배경색 해제
+
+                while ((entry = readdir(dir)) != NULL && line_num < getmaxy(preview_win) - 2) {
+                    if (entry->d_name[0] == '.') continue;
+
+                    // 파일의 전체 경로를 구성하여 파일 타입을 확인
+                    char full_path[PATH_MAX];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", filename, entry->d_name);
+                    struct stat entry_stat;
+                    stat(full_path, &entry_stat);
+
+                    // 파일 유형에 따라 색상 설정
+                    if (S_ISDIR(entry_stat.st_mode)) {
+                        wattron(preview_win, COLOR_PAIR(2)); // 디렉터리 색상
+                    } else if (entry_stat.st_mode & S_IXUSR) {
+                        wattron(preview_win, COLOR_PAIR(4)); // 실행 파일 색상
+                    } else {
+                        wattron(preview_win, COLOR_PAIR(3)); // 일반 파일 색상
+                    }
+
+                    // 파일 이름 출력
+                    mvwprintw(preview_win, ++line_num, 1, "  %s", entry->d_name);
+
+                    // 색상 해제
+                    wattroff(preview_win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
+                }
+                closedir(dir);
+            } else {
+                mvwprintw(preview_win, 1, 1, "Cannot opendir: %s", filename);
+            }
+}
+
+void do_file(WINDOW *preview_win,const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (file != NULL) {
+        char line[PREVIEW_WIDTH - 2];
+        int line_num = 1;
+        while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
+            int line_length = strlen(line);
+            if (line[line_length - 1] == '\n') line[line_length - 1] = '\0';
+
+            int x = 1;
+            for (int i = 0; i < line_length; i++) {
+                if (x >= PREVIEW_WIDTH - 1) {
+                    x = 1;
+                    line_num++;
+                }
+                mvwaddch(preview_win, line_num, x++, line[i]);
+            }
+            line_num++;
+        }
+        fclose(file);
+    }else {
+        mvwprintw(preview_win, 1, 1, "Cannot open file.");
+    }
+}
+
+void more(WINDOW *preview_win, const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        mvwprintw(preview_win, 1, 1, "Cannot fopen: %s",filename);
+        wrefresh(preview_win);
+        return;
+    }
+
+    int row, col;
+    getmaxyx(preview_win, row, col); // 창 크기 가져오기
+    col -= 2; // 좌우 여백 감안
+    row -= 2; // 상하 여백 감안
+    char line[col + 1];
+    long current_offset = 0; // 현재 오프셋
+    long prev_offset = 0;   // 이전 오프셋
+    FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
+    if (fp_tty == NULL) {
+        mvwprintw(preview_win, 1, 1, "Cannot open: /dev/tty");
+        wrefresh(preview_win);
+        fclose(file);
+        exit(1);
+    }
+
+    while (1) {
+        // 창을 지우고 현재 줄부터 출력
+        werase(preview_win);
+        box(preview_win, 0, 0);
+        wattron(preview_win, COLOR_PAIR(9));
+        box(preview_win, 0, 0);
+        wattroff(preview_win, COLOR_PAIR(9));
+
+        // 파일 포인터를 현재 오프셋으로 이동
+        fseek(file, current_offset, SEEK_SET);
+
+        int lines_displayed = 0; // 현재 화면에 출력된 줄 수
+        int first_line_length = 0; // 첫 번째 줄의 크기 저장
+        while (lines_displayed < row && fgets(line, sizeof(line), file) != NULL) {
+            mvwprintw(preview_win, lines_displayed + 1, 1, "%s", line);
+            if (lines_displayed == 0) { // 첫 번째 줄에서 크기 계산 -> reply = 1인 경우, 첫번째 줄 지우기 위함
+                first_line_length = strlen(line);
+            }
+            lines_displayed++;
+        }
+
+        // 파일 끝에 도달한 경우 종료
+        if (feof(file)) {
+            break;
+        }
+
+        wrefresh(preview_win);
+
+        // 사용자 입력 처리
+        int reply = see_more(fp_tty, preview_win, row, col);
+        if (reply == 0) { // 종료
+            break;
+        } else if (reply == row) { // 한 페이지
+            prev_offset = current_offset;
+            current_offset = ftell(file); // 파일 포인터 이동
+        } else if (reply == 1) { // 한 줄
+            current_offset = prev_offset + first_line_length; // 첫 번째 줄의 길이를 기준으로 한 줄 뒤로 이동
+            prev_offset = current_offset;
+        }
+    }
+
+    fclose(fp_tty);
+    fclose(file);
+}
+
+int see_more(FILE* file, WINDOW* preview_win, int row, int col)
+{
+    char c = 0;
+    while ((c = getc(file)) != EOF) {
+        if (c == '\t') // 종료
+            return 0;
+        else if (c == ' ') // 한 페이지 출력
+            return 1;
+        else if (c == '\r') // 한 줄 출력
+            return row;
+        else
+            continue;
+    }
     return 0;
+}
+
+
+// 경로 표시
+void display_path(WINDOW *path_win, WINDOW* preview_win) {
+    char cwd[PATH_MAX];
+    memset(cwd, 0, PATH_MAX); 
+    get_current_directory(cwd, PATH_MAX, preview_win);
+    werase(path_win);
+    box(path_win, 0, 0);
+    mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
+    wrefresh(path_win);
 }
