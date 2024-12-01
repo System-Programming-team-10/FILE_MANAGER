@@ -9,41 +9,7 @@
 #include <errno.h>
 #include <ncurses.h>
 #include "file.h"
-
-//menu_win을 extern으로 지정
-extern WINDOW *menu_win;
-
-//에러 메시지 중복 출력 방지    -   출력 : 1 / 출력 안하고 있을 때 : 0
-static int error_displaying = 0;
-
-//에러 출력 표시 : menu_win 우측에 에러 메시지 표시
-void display_error(WINDOW *menu_win, const char *format, ...) {
-    if (error_displaying) return;
-
-    error_displaying = 1;
-
-    char buffer[256];   //가변 인자로 문자열 받아서 저장하는 buffer
-    va_list args;   //가변 인자 처리하기 위한 pointer, 가변 인자 목록에서 현재 위치 인자 가져옴
-    va_start(args, format); //va_list 초기화
-    vsnprintf(buffer, sizeof(buffer), format, args);    //가변ㅇ 인자 이용하여 문자열  처리하고 버퍼에 저장
-    va_end(args);   // 가변 인자 처리 끝내고 va_list 정리
-
-    int menu_width = getmaxx(menu_win);
-    int msg_len = strlen(buffer);
-    int start_x = menu_width - msg_len - 2;
-    if (start_x < 0) start_x = 0;  // 메시지가 잘리지 않도록 보정
-
-    wattron(menu_win, COLOR_PAIR(7));
-    mvwprintw(menu_win, 0, start_x, "%s", buffer);
-    wattroff(menu_win, COLOR_PAIR(7));
-    wrefresh(menu_win);
-
-    napms(2000);    // 2초 대기
-    mvwprintw(menu_win, 0, start_x, "%-*s", msg_len, "");  // 메시지 지우기
-    wrefresh(menu_win);
-
-    error_displaying = 0;
-}
+#include "gui.h"
 
 
 // 파일 또는 디렉터리를 삭제하는 함수
@@ -259,8 +225,7 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         // 상위 디렉터리로 이동
         DIR *parent = opendir("..");
         if (!parent) {
-            display_error(menu_win,"Can not opendir : parent directory!");
-            //mvwprintw(preview_win, 1, 1, "Can not opendir: parent directory");
+            mvwprintw(preview_win, 1, 1, "Can not opendir: parent directory");
             wrefresh(preview_win);
         }
 
@@ -281,7 +246,6 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         closedir(parent);
         chdir("..");  // 상위 디렉터리로 이동
     }
-
     // 루트 디렉터리 처리
     if (ptr == temp + PATH_MAX - 1) {
         ptr--;
@@ -294,6 +258,8 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         //error// 버퍼가 충분하지 않음
     }
     memcpy(buf, ptr, len);
+
+    chdir(buf);
 }
 
 void resolve_absolute_path(char* absolute_path, const char* filename, WINDOW* preview_win) {
@@ -316,4 +282,3 @@ void resolve_absolute_path(char* absolute_path, const char* filename, WINDOW* pr
         absolute_path[0] = '\0';
     }
 }
-

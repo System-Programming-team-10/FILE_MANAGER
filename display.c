@@ -8,10 +8,36 @@
 #include <limits.h>
 #include "display.h"
 #include "file.h"
-int show_hidden_files = 0;          // 숨김 파일 표시 여부
-int preview_scroll_offset = 0;      // 미리보기 창 scroll offset
 
+void display_error(WINDOW *menu_win, const char *format, ...) {
 
+    static int error_displaying = 0;  
+    if (error_displaying) return;
+
+    error_displaying = 1;
+
+    char buffer[256];   //가변 인자로 문자열 받아서 저장하는 buffer
+    va_list args;   //가변 인자 처리하기 위한 pointer, 가변 인자 목록에서 현재 위치 인자 가져옴
+    va_start(args, format); //va_list 초기화
+    vsnprintf(buffer, sizeof(buffer), format, args);    //가변ㅇ 인자 이용하여 문자열  처리하고 버퍼에 저장
+    va_end(args);   // 가변 인자 처리 끝내고 va_list 정리
+
+    int menu_width = getmaxx(menu_win);
+    int msg_len = strlen(buffer);
+    int start_x = menu_width - msg_len - 2;
+    if (start_x < 0) start_x = 0;  // 메시지가 잘리지 않도록 보정
+
+    wattron(menu_win, COLOR_PAIR(7));
+    mvwprintw(menu_win, 0, start_x, "%s", buffer);
+    wattroff(menu_win, COLOR_PAIR(7));
+    wrefresh(menu_win);
+
+    napms(2000);    // 2초 대기
+    mvwprintw(menu_win, 0, start_x, "%-*s", msg_len, "");  // 메시지 지우기
+    wrefresh(menu_win);
+
+    error_displaying = 0;
+}
 // highlight : 현재 선택된 항목 -> files 배열에서 현재 선택된 파일의 인덱스
 // 파일 목록을 표시하는 함수 , scroll_offset : 스크롤 위치 조정 -> 시작 인덱스 조절
 void display_files(WINDOW *win, char *files[], int file_count, int highlight, int scroll_offset) {
@@ -113,81 +139,22 @@ int load_files(char *files[], WINDOW *preview_win) {
     return file_count;
 }
 
+// 파일 미리보기 기능 -> display_ls_files를 사용해서 바꾸고 안에 있는 케이스 바꿔야 됨
 void display_preview(WINDOW *preview_win, const char *filename) {
-    werase(preview_win); // 창 지우기
-    box(preview_win, 0, 0); // 테두리 그리기
+    werase(preview_win);
+    box(preview_win, 0, 0);
 
     struct stat file_stat;
     if (stat(filename, &file_stat) == 0) {
-        if (S_ISDIR(file_stat.st_mode)) { // 선택 항목이 디렉터리인 경우
-            DIR *dir = opendir(filename);
-            if (dir) {
-                struct dirent *entry;
-                int line_num = 1; // 출력할 줄 번호
-                int is_empty = 1; // 디렉터리 비어 있음 여부 플래그
 
-                mvwprintw(preview_win, line_num++, 2, "[Directory: %s]", filename);
-
-                while ((entry = readdir(dir)) != NULL) {
-                    if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                        is_empty = 0; // 비어 있지 않음
-                        
-                        // 파일/디렉터리 경로 구성
-                        char full_path[PATH_MAX];
-                        snprintf(full_path, sizeof(full_path), "%s/%s", filename, entry->d_name);
-
-                        // 파일 상태 확인
-                        struct stat entry_stat;
-                        if (stat(full_path, &entry_stat) == 0) {
-                            if (S_ISDIR(entry_stat.st_mode)) {
-                                wattron(preview_win, COLOR_PAIR(2)); // 디렉터리 색상
-                            } else if (entry_stat.st_mode & S_IXUSR) {
-                                wattron(preview_win, COLOR_PAIR(4)); // 실행 파일 색상
-                            } else {
-                                wattron(preview_win, COLOR_PAIR(3)); // 일반 파일 색상
-                            }
-                        }
-
-                        // 파일/디렉터리 이름 출력
-                        mvwprintw(preview_win, line_num++, 2, "  %s", entry->d_name);
-
-                        // 색상 해제
-                        wattroff(preview_win, COLOR_PAIR(2) | COLOR_PAIR(3) | COLOR_PAIR(4));
-                        if (line_num >= getmaxy(preview_win) - 1) { // 화면을 넘기지 않도록 제한
-                            mvwprintw(preview_win, line_num++, 2, "  ...");
-                            break;
-                        }
-                    }
-                }
-                closedir(dir);
-
-                if (is_empty) { // 디렉터리가 비어 있으면 "None" 출력
-                    mvwprintw(preview_win, line_num++, 2, "  None");
-                }
-            } else {
-                mvwprintw(preview_win, 1, 2, "Cannot open directory: %s", filename);
-                
-            }
-        } else { // 선택 항목이 파일인 경우
-            FILE *file = fopen(filename, "r");
-            if (file) {
-                char line[PREVIEW_WIDTH - 2];
-                int line_num = 1;
-                while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
-                    mvwprintw(preview_win, line_num++, 2, "%s", line);
-                }
-                fclose(file);
-            } else {
-                mvwprintw(preview_win, 1, 2, "Cannot open file: %s", filename);
-            }
+        if (S_ISDIR(file_stat.st_mode)) {   // 디렉터리 미리보기
+            do_dir(preview_win,filename);  
+        } else {    // 파일 미리보기 (텍스트 또는 바이너리)
+            do_file(preview_win, filename);
         }
-    } else {
-        mvwprintw(preview_win, 1, 2, "File/Directory not found: %s", filename);
     }
     wrefresh(preview_win);
 }
-
-
 
 void do_dir(WINDOW *preview_win,const char *filename)
 {
@@ -201,7 +168,7 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 wattroff(preview_win, COLOR_PAIR(5)); // 헤더 배경색 해제
 
                 while ((entry = readdir(dir)) != NULL && line_num < getmaxy(preview_win) - 2) {
-                    if (entry->d_name[0] == '.' && !show_hidden_files) continue;
+                    if (entry->d_name[0] == '.') continue;
 
                     // 파일의 전체 경로를 구성하여 파일 타입을 확인
                     char full_path[PATH_MAX];
@@ -235,7 +202,7 @@ void do_file(WINDOW *preview_win,const char *filename)
     FILE *file = fopen(filename, "r");
     if (file != NULL) {
         char line[PREVIEW_WIDTH - 2];
-        int line_num = 1 + preview_scroll_offset;
+        int line_num = 1;
         while (fgets(line, sizeof(line), file) != NULL && line_num < getmaxy(preview_win) - 2) {
             int line_length = strlen(line);
             if (line[line_length - 1] == '\n') line[line_length - 1] = '\0';
@@ -341,15 +308,13 @@ int see_more(FILE* file, WINDOW* preview_win, int row, int col)
     return 0;
 }
 
-void display_path(WINDOW *path_win, WINDOW *preview_win) {
+// 경로 표시
+void display_path(WINDOW *path_win, WINDOW* preview_win) {
     char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        werase(path_win);
-        box(path_win, 0, 0);
-        mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
-        wrefresh(path_win);
-    } else {
-        mvwprintw(preview_win, 1, 1, "Failed to get current path. Ensure you have access.");
-        wrefresh(preview_win);
-    }
+    memset(cwd, 0, PATH_MAX); 
+    get_current_directory(cwd, PATH_MAX, preview_win);
+    werase(path_win);
+    box(path_win, 0, 0);
+    mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
+    wrefresh(path_win);
 }
