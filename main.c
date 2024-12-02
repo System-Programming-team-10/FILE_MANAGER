@@ -25,7 +25,7 @@ void block_signals(sigset_t *oldset) {
     sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
     if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
         //perror("sigprocmask - block");
-        display_error(menu_win,"sigprocmask - block");
+        display_error("sigprocmask - block");
         exit(EXIT_FAILURE);
     }
 }
@@ -33,7 +33,7 @@ void block_signals(sigset_t *oldset) {
 void unblock_signals(sigset_t *oldset) {
     if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
         //perror("sigprocmask - unblock");
-        display_error(menu_win,"sigprocmask - unblock");
+        display_error("sigprocmask - unblock");
         exit(EXIT_FAILURE);
     }
 }
@@ -186,12 +186,15 @@ int main() {
                             display_preview(preview_win, "."); // 현재 디렉터리 내용 표시
                             display_path(path_win, preview_win);
                         } else {    // 디렉터리 이동 실패하면
-                            display_error(menu_win,"Failed to change directory.");
+                            display_error("Failed to change directory.");
+
                             //mvwprintw(preview_win, 1, 1, "Failed to change directory.");
                             wrefresh(preview_win);
                         }
                     } else {    //루트 디렉터리면
-                        display_error(menu_win,"Not a directory : %s",files[highlight]);
+
+                        display_error("Not a directory : %s",files[highlight]);
+
                         //mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
                         wrefresh(preview_win);
                     }
@@ -205,7 +208,7 @@ int main() {
                 filename = files[highlight];
 
                 strcpy(save_filename, filename);
-                resolve_absolute_path(abs_filepath, filename, preview_win);
+                resolve_absolute_path(abs_filepath, filename);
 
                 // Copy 메뉴 배경색 변경
                 mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
@@ -232,7 +235,7 @@ int main() {
                 filename = files[highlight];
                  // 시그널 차단
                 block_signals(&oldset);
-                remove_file(filename, preview_win); // 파일 삭제
+                remove_file(filename); // 파일 삭제
                 // 시그널 차단 해제
                 unblock_signals(&oldset);
                 file_count = load_files(files, preview_win);
@@ -255,7 +258,7 @@ int main() {
                 memset(abs_filepath, 0, PATH_MAX);
                 filename = files[highlight];
                 strcpy(save_filename, filename);
-                resolve_absolute_path(abs_filepath, filename, preview_win);
+                resolve_absolute_path(abs_filepath, filename);
 
                 mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
                 wrefresh(menu_win);
@@ -277,7 +280,7 @@ int main() {
                 if (file_flag != 0) {
                     memset(abs_dirpath, 0, PATH_MAX);
                     memset(destination, 0, PATH_MAX);
-                    get_current_directory(abs_dirpath,PATH_MAX, preview_win);
+                    get_current_directory(abs_dirpath,PATH_MAX);
                     strcat(destination, abs_dirpath);
                     strcat(destination, "/");
                     strcat(destination, save_filename);
@@ -286,14 +289,14 @@ int main() {
                             case 1:
                                 // 시그널 차단
                                 block_signals(&oldset);
-                                move_file(destination, abs_filepath, preview_win); // Move
+                                move_file(destination, abs_filepath); // Move
                                 // 시그널 차단 해제
                                 unblock_signals(&oldset);
                                 break; 
                             case 2:
                                  // 시그널 차단
                                 block_signals(&oldset);
-                                cp_file(destination, abs_filepath, preview_win); // Copy
+                                cp_file(destination, abs_filepath); // Copy
                                 // 시그널 차단 해제
                                 unblock_signals(&oldset);
                                 break; 
@@ -317,7 +320,7 @@ int main() {
 
                 
                 } else {
-                    display_error(menu_win, "No file to paste");  // 에러 메시지 출력
+                    display_error( "No file to paste");  // 에러 메시지 출력
                 
                     break;
                 }
@@ -364,7 +367,7 @@ int main() {
                 struct stat file_stat;
                 if (stat(files[highlight], &file_stat) == 0) { // 파일 상태 확인
                     if (S_ISDIR(file_stat.st_mode)) { // 디렉터리인 경우 Tab 동작 무시
-                        display_error(menu_win,"Error : Cannot open directories with Tab.");
+                        display_error("Error : Cannot open directories with Tab.");
                         //mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
                         wrefresh(preview_win);
                         break;
@@ -376,7 +379,7 @@ int main() {
                         highlight_window(preview_win, 0); // 우측 창 비활성화
                     }
                 } else {
-                    display_error(menu_win,"Error : accwssing file : %s",files[highlight]);
+                    display_error("Error : accwssing file : %s",files[highlight]);
                     //mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
                     wrefresh(preview_win);
                 }
