@@ -8,8 +8,9 @@
 #include <limits.h>
 #include "display.h"
 #include "file.h"
+#include "gui.h"
 
-void display_error(WINDOW *menu_win, const char *format, ...) {
+void display_error(const char *format, ...) {
 
     static int error_displaying = 0;  
     if (error_displaying) return;
@@ -51,13 +52,13 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     //공백 배경색 처리
     for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
-    mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
+    mvwprintw(win, 1, 31, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=41;i<getmaxx(win)-20;i++)
+    for(int i=35;i<getmaxx(win)-18;i++)
         mvwprintw(win,1,i," ");
    
-    mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
-    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
+    mvwprintw(win, 1, getmaxx(win) - 18, "Modify time"); // Modify time 위치 오른쪽 정렬
+    for(int i=getmaxx(win)-7;i<getmaxx(win);i++) {
         mvwprintw(win,1,i," ");
     }
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
@@ -105,8 +106,8 @@ void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, 
 
             // 파일명, 사이즈, 수정 시간 출력 위치 조정
             mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
-            mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
-            mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
+            mvwprintw(win, i + 2, 22, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, getmaxx(win) - 18, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
 
             if (index == highlight) {
                 wattroff(win, COLOR_PAIR(7));
@@ -124,8 +125,7 @@ int load_files(char *files[], WINDOW *preview_win) {
 
     dir = opendir(".");
     if (dir == NULL) {
-        mvwprintw(preview_win, 1, 1, "Cannot open current directory.");
-        wrefresh(preview_win);
+        display_error("Cannot open current directory.");
         return -1;
     }
 
@@ -193,7 +193,7 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 }
                 closedir(dir);
             } else {
-                mvwprintw(preview_win, 1, 1, "Cannot opendir: %s", filename);
+                display_error("Cannot opendir: %s", filename);
             }
 }
 
@@ -219,7 +219,8 @@ void do_file(WINDOW *preview_win,const char *filename)
         }
         fclose(file);
     }else {
-        mvwprintw(preview_win, 1, 1, "Cannot open file.");
+
+        display_error( "Cannot open file.");
     }
 }
 
@@ -227,8 +228,7 @@ void more(WINDOW *preview_win, const char *filename)
 {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        mvwprintw(preview_win, 1, 1, "Cannot fopen: %s",filename);
-        wrefresh(preview_win);
+        display_error("Cannot fopen: %s",filename);
         return;
     }
 
@@ -241,8 +241,8 @@ void more(WINDOW *preview_win, const char *filename)
     long prev_offset = 0;   // 이전 오프셋
     FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
     if (fp_tty == NULL) {
-        mvwprintw(preview_win, 1, 1, "Cannot open: /dev/tty");
-        wrefresh(preview_win);
+
+        display_error( "Cannot open: /dev/tty");
         fclose(file);
         exit(1);
     }
@@ -312,7 +312,7 @@ int see_more(FILE* file, WINDOW* preview_win, int row, int col)
 void display_path(WINDOW *path_win, WINDOW* preview_win) {
     char cwd[PATH_MAX];
     memset(cwd, 0, PATH_MAX); 
-    get_current_directory(cwd, PATH_MAX, preview_win);
+    get_current_directory(cwd, PATH_MAX);
     werase(path_win);
     box(path_win, 0, 0);
     mvwprintw(path_win, 1, 1, "Current Path: %s", cwd);
