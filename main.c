@@ -24,7 +24,6 @@ void block_signals(sigset_t *oldset) {
     sigemptyset(&blockset);
     sigaddset(&blockset, SIGINT);  // SIGINT (Ctrl+C) 차단
     if (sigprocmask(SIG_BLOCK, &blockset, oldset) == -1) {
-        //perror("sigprocmask - block");
         display_error("sigprocmask - block");
         exit(EXIT_FAILURE);
     }
@@ -32,7 +31,6 @@ void block_signals(sigset_t *oldset) {
 
 void unblock_signals(sigset_t *oldset) {
     if (sigprocmask(SIG_SETMASK, oldset, NULL) == -1) {
-        //perror("sigprocmask - unblock");
         display_error("sigprocmask - unblock");
         exit(EXIT_FAILURE);
     }
@@ -183,19 +181,15 @@ int main() {
                             scroll_offset = 0;
 
                             display_files(left_win, files, file_count, highlight, scroll_offset);
-                            display_preview(preview_win, "."); // 현재 디렉터리 내용 표시
+                            display_preview(preview_win, files[highlight]); // 현재 디렉터리 내용 표시
                             display_path(path_win, preview_win);
                         } else {    // 디렉터리 이동 실패하면
                             display_error("Failed to change directory.");
-
-                            //mvwprintw(preview_win, 1, 1, "Failed to change directory.");
                             wrefresh(preview_win);
                         }
                     } else {    //루트 디렉터리면
 
                         display_error("Not a directory : %s",files[highlight]);
-
-                        //mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
                         wrefresh(preview_win);
                     }
                 }
@@ -368,7 +362,6 @@ int main() {
                 if (stat(files[highlight], &file_stat) == 0) { // 파일 상태 확인
                     if (S_ISDIR(file_stat.st_mode)) { // 디렉터리인 경우 Tab 동작 무시
                         display_error("Error : Cannot open directories with Tab.");
-                        //mvwprintw(preview_win, 1, 1, "Error : Cannot open directories with Tab.");
                         wrefresh(preview_win);
                         break;
                     } else { // 일반 파일인 경우 more 기능 실행
@@ -380,7 +373,6 @@ int main() {
                     }
                 } else {
                     display_error("Error : accwssing file : %s",files[highlight]);
-                    //mvwprintw(preview_win, 1, 1, "Error :  accessing file: %s", files[highlight]);
                     wrefresh(preview_win);
                 }
                 break;
