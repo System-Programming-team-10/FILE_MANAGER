@@ -75,6 +75,7 @@ void cp_file(const char* destination, const char* filepath) {
 
     // 원본 파일 상태 확인
     if (stat(filepath, &src_info) == -1) {
+
         display_error("stat fail: %s", filepath);
         return;
     }
@@ -83,6 +84,7 @@ void cp_file(const char* destination, const char* filepath) {
     if (strncmp(filepath, destination, parent_len) == 0) {
         display_error("The destination is a subdirectory of this file path");
         return;
+
     }
 
     // 복사 로직 시작
@@ -90,13 +92,17 @@ void cp_file(const char* destination, const char* filepath) {
         // 디렉터리 복사 로직
         DIR* dir = opendir(filepath);
         if (dir == NULL) {
+
             display_error("Cannot open directory: %s", filepath);
+
             return;
         }
 
         // 복사 대상 디렉터리 생성
         if (mkdir(destination, src_info.st_mode & 0777) == -1 && errno != EEXIST) {
+
             display_error( "Cannot create directory: %s", destination);
+
             closedir(dir);
             return;
         }
@@ -111,7 +117,9 @@ void cp_file(const char* destination, const char* filepath) {
             snprintf(srcPath, sizeof(srcPath), "%s/%s", filepath, entry->d_name);
             snprintf(destPath, sizeof(destPath), "%s/%s", destination, entry->d_name);
 
+
             cp_file(destPath, srcPath);
+
         }
 
         closedir(dir);
@@ -119,13 +127,16 @@ void cp_file(const char* destination, const char* filepath) {
         // 일반 파일 복사 로직
         FILE *src = fopen(filepath, "rb");
         if (!src) {
+
             display_error( "Cannot open source file: %s", filepath);
+
             return;
         }
 
         FILE *dest = fopen(destination, "wb");
         if (!dest) {
             display_error("Cannot open destination file: %s", destination);
+
             fclose(src);
             return;
         }
@@ -138,6 +149,8 @@ void cp_file(const char* destination, const char* filepath) {
 
         fclose(src);
         fclose(dest);
+
+        display_error(menu_win, "Copy completed: %s -> %s", filepath, destination);
     }
 }
 

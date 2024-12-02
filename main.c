@@ -187,11 +187,14 @@ int main() {
                             display_path(path_win, preview_win);
                         } else {    // 디렉터리 이동 실패하면
                             display_error("Failed to change directory.");
+
                             //mvwprintw(preview_win, 1, 1, "Failed to change directory.");
                             wrefresh(preview_win);
                         }
                     } else {    //루트 디렉터리면
+
                         display_error("Not a directory : %s",files[highlight]);
+
                         //mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
                         wrefresh(preview_win);
                     }
