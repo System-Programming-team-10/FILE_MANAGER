@@ -9,41 +9,7 @@
 #include <errno.h>
 #include <ncurses.h>
 #include "file.h"
-
-//menu_win을 extern으로 지정
-extern WINDOW *menu_win;
-
-//에러 메시지 중복 출력 방지    -   출력 : 1 / 출력 안하고 있을 때 : 0
-static int error_displaying = 0;
-
-//에러 출력 표시 : menu_win 우측에 에러 메시지 표시
-void display_error(WINDOW *menu_win, const char *format, ...) {
-    if (error_displaying) return;
-
-    error_displaying = 1;
-
-    char buffer[256];   //가변 인자로 문자열 받아서 저장하는 buffer
-    va_list args;   //가변 인자 처리하기 위한 pointer, 가변 인자 목록에서 현재 위치 인자 가져옴
-    va_start(args, format); //va_list 초기화
-    vsnprintf(buffer, sizeof(buffer), format, args);    //가변ㅇ 인자 이용하여 문자열  처리하고 버퍼에 저장
-    va_end(args);   // 가변 인자 처리 끝내고 va_list 정리
-
-    int menu_width = getmaxx(menu_win);
-    int msg_len = strlen(buffer);
-    int start_x = menu_width - msg_len - 2;
-    if (start_x < 0) start_x = 0;  // 메시지가 잘리지 않도록 보정
-
-    wattron(menu_win, COLOR_PAIR(7));
-    mvwprintw(menu_win, 0, start_x, "%s", buffer);
-    wattroff(menu_win, COLOR_PAIR(7));
-    wrefresh(menu_win);
-
-    napms(2000);    // 2초 대기
-    mvwprintw(menu_win, 0, start_x, "%-*s", msg_len, "");  // 메시지 지우기
-    wrefresh(menu_win);
-
-    error_displaying = 0;
-}
+#include "gui.h"
 
 
 // 파일 또는 디렉터리를 삭제하는 함수
@@ -118,7 +84,6 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 원본 파일 상태 확인
     if (stat(filepath, &src_info) == -1) {
         display_error(menu_win, "stat fail: %s", filepath);
-        wrefresh(preview_win);
         return;
     }
 
@@ -128,54 +93,33 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 원본과 대상의 절대 경로 가져오기
     if (realpath(filepath, real_src) == NULL) {
         display_error(menu_win, "Error resolving source path: %s", filepath);
-        wrefresh(preview_win);
-        return;
-    }
-    if (realpath(destination, real_dest) == NULL) {
-        display_error(menu_win, "Error resolving destination path: %s", destination);
-        wrefresh(preview_win);
         return;
     }
 
-    // 복사 대상이 원본 디렉터리의 하위 경로인지 확인
-    size_t src_len = strlen(real_src);
-    if (strncmp(real_dest, real_src, src_len) == 0 && real_dest[src_len] == '/') {
-        display_error(menu_win, "Destination is a subdirectory of the source directory.");
-        wrefresh(preview_win);
-        return;
-    }
-
-    // 동일한 파일인지 확인
-    if (strcmp(filepath, destination) == 0) {
-        display_error(menu_win, "Source and destination are the same: %s", filepath);
-        wrefresh(preview_win);
-        return;
-    }
-
-    // 복사 대상에 동일한 파일이 존재하는지 확인
-    if (stat(destination, &dest_info) == 0) {
-        if (S_ISDIR(dest_info.st_mode)) {
-            display_error(menu_win, "Error: Directory already exists at destination");
-        } else {
-            display_error(menu_win, "Error: File already exists at destination");
+    // 대상 경로가 존재하지 않으면 realpath를 호출하기 전에 처리
+    if (stat(destination, &dest_info) == -1) {
+        // 경로가 없으면 경로를 생성할 준비
+        strcpy(real_dest, destination); // real_dest에 직접 저장
+    } else {
+        // 대상 경로가 존재하면 realpath를 호출
+        if (realpath(destination, real_dest) == NULL) {
+            display_error(menu_win, "Error resolving destination path: %s", destination);
+            return;
         }
-        wrefresh(preview_win);
-        return;
     }
 
-    // 디렉터리 복사
+    // 복사 로직 시작
     if (S_ISDIR(src_info.st_mode)) {
+        // 디렉터리 복사 로직
         DIR* dir = opendir(filepath);
         if (dir == NULL) {
             display_error(menu_win, "Cannot open directory: %s", filepath);
-            wrefresh(preview_win);
             return;
         }
 
         // 복사 대상 디렉터리 생성
-        if (mkdir(destination, src_info.st_mode & 0777) == -1) {
+        if (mkdir(destination, src_info.st_mode & 0777) == -1 && errno != EEXIST) {
             display_error(menu_win, "Cannot create directory: %s", destination);
-            wrefresh(preview_win);
             closedir(dir);
             return;
         }
@@ -186,31 +130,25 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
                 continue;
             }
 
-            // 하위 디렉터리 및 파일 경로 생성
             char srcPath[PATH_MAX], destPath[PATH_MAX];
             snprintf(srcPath, sizeof(srcPath), "%s/%s", filepath, entry->d_name);
             snprintf(destPath, sizeof(destPath), "%s/%s", destination, entry->d_name);
 
-            cp_file(destPath, srcPath, preview_win); // 하위 파일 및 디렉터리 재귀적으로 복사
+            cp_file(destPath, srcPath, preview_win);
         }
 
         closedir(dir);
-    } else { // 파일 복사
-        FILE *src, *dest;
-
-        // 원본 파일 열기
-        src = fopen(filepath, "rb");
-        if (src == NULL) {
+    } else {
+        // 일반 파일 복사 로직
+        FILE *src = fopen(filepath, "rb");
+        if (!src) {
             display_error(menu_win, "Cannot open source file: %s", filepath);
-            wrefresh(preview_win);
             return;
         }
 
-        // 대상 파일 열기
-        dest = fopen(destination, "wb");
-        if (dest == NULL) {
+        FILE *dest = fopen(destination, "wb");
+        if (!dest) {
             display_error(menu_win, "Cannot open destination file: %s", destination);
-            wrefresh(preview_win);
             fclose(src);
             return;
         }
@@ -223,6 +161,8 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
 
         fclose(src);
         fclose(dest);
+
+        display_error(menu_win, "Copy completed: %s -> %s", filepath, destination);
     }
 }
 
@@ -259,8 +199,7 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         // 상위 디렉터리로 이동
         DIR *parent = opendir("..");
         if (!parent) {
-            display_error(menu_win,"Can not opendir : parent directory!");
-            //mvwprintw(preview_win, 1, 1, "Can not opendir: parent directory");
+            mvwprintw(preview_win, 1, 1, "Can not opendir: parent directory");
             wrefresh(preview_win);
         }
 
@@ -281,7 +220,6 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         closedir(parent);
         chdir("..");  // 상위 디렉터리로 이동
     }
-
     // 루트 디렉터리 처리
     if (ptr == temp + PATH_MAX - 1) {
         ptr--;
@@ -294,6 +232,8 @@ void get_current_directory(char *buf, size_t size, WINDOW* preview_win) {
         //error// 버퍼가 충분하지 않음
     }
     memcpy(buf, ptr, len);
+
+    chdir(buf);
 }
 
 void resolve_absolute_path(char* absolute_path, const char* filename, WINDOW* preview_win) {
@@ -316,4 +256,3 @@ void resolve_absolute_path(char* absolute_path, const char* filename, WINDOW* pr
         absolute_path[0] = '\0';
     }
 }
-

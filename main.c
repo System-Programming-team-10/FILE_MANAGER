@@ -117,8 +117,17 @@ int main() {
         // Move 상태 해제 조건
         if (file_flag == 1 && !is_arrow_key && !is_paste_key && ch != 'm') {
             file_flag = 0;
-            mvwchgat(menu_win, 0, 21, 9, A_NORMAL, 1, NULL);  // Move (M) 기본 배경 복원
+            mvwchgat(menu_win, 0, 24, 9, A_NORMAL, 1, NULL);  // Move (M) 기본 배경 복원
             wrefresh(menu_win);
+
+            // 현재 디렉터리 파일 목록을 다시 로드하고 화면 갱신
+            file_count = load_files(files, preview_win);
+            highlight = 0;  // highlight 초기화
+            scroll_offset = 0;  // scrikk_offset 초기화
+            display_files(left_win, files, file_count, highlight, scroll_offset);
+            display_preview(preview_win, files[highlight]);
+            display_path(path_win, preview_win);
+            refresh();
         }
 
         // Delete 상태 해제 조건
@@ -132,6 +141,8 @@ int main() {
             case KEY_UP:
                 if (highlight > 0) highlight--;
                 if (highlight < scroll_offset) scroll_offset--;
+                if (highlight < 0) highlight = 0; // highlight 경계값 체크
+                if (scroll_offset < 0) scroll_offset = 0; // scroll_offset 경계값 체크
                 display_files(left_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
@@ -141,6 +152,7 @@ int main() {
                 if (highlight < file_count - 1) highlight++;
                 if (highlight >= scroll_offset + getmaxy(left_win) - 3) scroll_offset++;
                 display_files(left_win, files, file_count, highlight, scroll_offset);
+                if (highlight >= file_count) highlight = file_count - 1; // highlight 경계값 체크
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
                 break;
@@ -174,11 +186,13 @@ int main() {
                             display_preview(preview_win, "."); // 현재 디렉터리 내용 표시
                             display_path(path_win, preview_win);
                         } else {    // 디렉터리 이동 실패하면
-                            mvwprintw(preview_win, 1, 1, "Failed to change directory.");
+                            display_error(menu_win,"Failed to change directory.");
+                            //mvwprintw(preview_win, 1, 1, "Failed to change directory.");
                             wrefresh(preview_win);
                         }
                     } else {    //루트 디렉터리면
-                        mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
+                        display_error(menu_win,"Not a directory : %s",files[highlight]);
+                        //mvwprintw(preview_win, 1, 1, "Not a directory: %s", files[highlight]);
                         wrefresh(preview_win);
                     }
                 }
@@ -197,6 +211,20 @@ int main() {
                 mvwchgat(menu_win, 0, 1, 8, A_NORMAL, 7, NULL); // Copy (C) 배경 시안으로 변경
                 wrefresh(menu_win);
                 refresh();
+
+
+                for (int i = 0; i < file_count; i++) {
+                    free(files[i]);
+                }   
+                file_count = load_files(files, preview_win);
+
+
+                highlight = 0;  // 강조 표시 초기화
+                scroll_offset = 0;  // 스크롤 초기화
+                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_preview(preview_win, files[highlight]); // 미리보기 창 갱신
+
+                
                 break;
 
             case 'd':  // Delete
@@ -232,6 +260,17 @@ int main() {
                 mvwchgat(menu_win, 0, 24, 8, A_NORMAL, 7, NULL); // Move (M) 배경 시안으로 변경
                 wrefresh(menu_win);
                 refresh();
+
+                for (int i = 0; i < file_count; i++) {
+                    free(files[i]);
+                }   
+                file_count = load_files(files, preview_win);
+
+
+                highlight = 0;  // 강조 표시 초기화
+                scroll_offset = 0;  // 스크롤 초기화
+                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_preview(preview_win, files[highlight]); // 미리보기 창 갱신
                 break;
 
             case 'p':  // Paste
@@ -343,6 +382,7 @@ int main() {
                 }
                 break;
         }
+            
             
 
     highlight_window(left_win, 1);
