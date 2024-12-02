@@ -84,7 +84,6 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 원본 파일 상태 확인
     if (stat(filepath, &src_info) == -1) {
         display_error(menu_win, "stat fail: %s", filepath);
-        wrefresh(preview_win);
         return;
     }
 
@@ -94,54 +93,33 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
     // 원본과 대상의 절대 경로 가져오기
     if (realpath(filepath, real_src) == NULL) {
         display_error(menu_win, "Error resolving source path: %s", filepath);
-        wrefresh(preview_win);
-        return;
-    }
-    if (realpath(destination, real_dest) == NULL) {
-        display_error(menu_win, "Error resolving destination path: %s", destination);
-        wrefresh(preview_win);
         return;
     }
 
-    // 복사 대상이 원본 디렉터리의 하위 경로인지 확인
-    size_t src_len = strlen(real_src);
-    if (strncmp(real_dest, real_src, src_len) == 0 && real_dest[src_len] == '/') {
-        display_error(menu_win, "Destination is a subdirectory of the source directory.");
-        wrefresh(preview_win);
-        return;
-    }
-
-    // 동일한 파일인지 확인
-    if (strcmp(filepath, destination) == 0) {
-        display_error(menu_win, "Source and destination are the same: %s", filepath);
-        wrefresh(preview_win);
-        return;
-    }
-
-    // 복사 대상에 동일한 파일이 존재하는지 확인
-    if (stat(destination, &dest_info) == 0) {
-        if (S_ISDIR(dest_info.st_mode)) {
-            display_error(menu_win, "Error: Directory already exists at destination");
-        } else {
-            display_error(menu_win, "Error: File already exists at destination");
+    // 대상 경로가 존재하지 않으면 realpath를 호출하기 전에 처리
+    if (stat(destination, &dest_info) == -1) {
+        // 경로가 없으면 경로를 생성할 준비
+        strcpy(real_dest, destination); // real_dest에 직접 저장
+    } else {
+        // 대상 경로가 존재하면 realpath를 호출
+        if (realpath(destination, real_dest) == NULL) {
+            display_error(menu_win, "Error resolving destination path: %s", destination);
+            return;
         }
-        wrefresh(preview_win);
-        return;
     }
 
-    // 디렉터리 복사
+    // 복사 로직 시작
     if (S_ISDIR(src_info.st_mode)) {
+        // 디렉터리 복사 로직
         DIR* dir = opendir(filepath);
         if (dir == NULL) {
             display_error(menu_win, "Cannot open directory: %s", filepath);
-            wrefresh(preview_win);
             return;
         }
 
         // 복사 대상 디렉터리 생성
-        if (mkdir(destination, src_info.st_mode & 0777) == -1) {
+        if (mkdir(destination, src_info.st_mode & 0777) == -1 && errno != EEXIST) {
             display_error(menu_win, "Cannot create directory: %s", destination);
-            wrefresh(preview_win);
             closedir(dir);
             return;
         }
@@ -152,31 +130,25 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
                 continue;
             }
 
-            // 하위 디렉터리 및 파일 경로 생성
             char srcPath[PATH_MAX], destPath[PATH_MAX];
             snprintf(srcPath, sizeof(srcPath), "%s/%s", filepath, entry->d_name);
             snprintf(destPath, sizeof(destPath), "%s/%s", destination, entry->d_name);
 
-            cp_file(destPath, srcPath, preview_win); // 하위 파일 및 디렉터리 재귀적으로 복사
+            cp_file(destPath, srcPath, preview_win);
         }
 
         closedir(dir);
-    } else { // 파일 복사
-        FILE *src, *dest;
-
-        // 원본 파일 열기
-        src = fopen(filepath, "rb");
-        if (src == NULL) {
+    } else {
+        // 일반 파일 복사 로직
+        FILE *src = fopen(filepath, "rb");
+        if (!src) {
             display_error(menu_win, "Cannot open source file: %s", filepath);
-            wrefresh(preview_win);
             return;
         }
 
-        // 대상 파일 열기
-        dest = fopen(destination, "wb");
-        if (dest == NULL) {
+        FILE *dest = fopen(destination, "wb");
+        if (!dest) {
             display_error(menu_win, "Cannot open destination file: %s", destination);
-            wrefresh(preview_win);
             fclose(src);
             return;
         }
@@ -189,6 +161,8 @@ void cp_file(const char* destination, const char* filepath, WINDOW* preview_win)
 
         fclose(src);
         fclose(dest);
+
+        display_error(menu_win, "Copy completed: %s -> %s", filepath, destination);
     }
 }
 

@@ -51,13 +51,13 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     //공백 배경색 처리
     for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
-    mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
+    mvwprintw(win, 1, 31, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=41;i<getmaxx(win)-20;i++)
+    for(int i=35;i<getmaxx(win)-18;i++)
         mvwprintw(win,1,i," ");
    
-    mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
-    for(int i=getmaxx(win)-9;i<getmaxx(win);i++) {
+    mvwprintw(win, 1, getmaxx(win) - 18, "Modify time"); // Modify time 위치 오른쪽 정렬
+    for(int i=getmaxx(win)-7;i<getmaxx(win);i++) {
         mvwprintw(win,1,i," ");
     }
     wattroff(win, COLOR_PAIR(8)); // 헤더 배경색 해제
@@ -105,8 +105,8 @@ void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, 
 
             // 파일명, 사이즈, 수정 시간 출력 위치 조정
             mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
-            mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
-            mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
+            mvwprintw(win, i + 2, 22, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, getmaxx(win) - 18, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
 
             if (index == highlight) {
                 wattroff(win, COLOR_PAIR(7));
