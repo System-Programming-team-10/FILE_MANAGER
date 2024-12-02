@@ -43,7 +43,7 @@ void remove_file(const char* filepath) {
             remove_file(fullpath); // 하위 디렉터리를 재귀적으로 삭제
         } else { 
             if (unlink(fullpath) == -1) { 
-                display_error("unlink fail: %ss", filepath);
+                display_error("unlink fail: %s", filepath);
                 continue;
             }
         }

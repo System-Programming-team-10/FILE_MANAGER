@@ -52,12 +52,12 @@ void display_files(WINDOW *win, char *files[], int file_count, int highlight, in
     //공백 배경색 처리
     for(int i=5;i<37;i++)
         mvwprintw(win,1,i," ");
-    mvwprintw(win, 1, 31, "Size"); // Size 위치 조정
+    mvwprintw(win, 1, 37, "Size"); // Size 위치 조정
     //공백 배경색 처리
-    for(int i=35;i<getmaxx(win)-18;i++)
+    for(int i=35;i<getmaxx(win)-20;i++)
         mvwprintw(win,1,i," ");
    
-    mvwprintw(win, 1, getmaxx(win) - 18, "Modify time"); // Modify time 위치 오른쪽 정렬
+    mvwprintw(win, 1, getmaxx(win) - 20, "Modify time"); // Modify time 위치 오른쪽 정렬
     for(int i=getmaxx(win)-7;i<getmaxx(win);i++) {
         mvwprintw(win,1,i," ");
     }
@@ -106,9 +106,8 @@ void display_ls_file(WINDOW *win, char *files[], int file_count, int highlight, 
 
             // 파일명, 사이즈, 수정 시간 출력 위치 조정
             mvwprintw(win, i + 2, 1, "%-25s", files[index]);                   // 파일 이름
-            mvwprintw(win, i + 2, 22, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
-            mvwprintw(win, i + 2, getmaxx(win) - 18, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
-
+           mvwprintw(win, i + 2, 32, "%10lld bytes", (long long)file_stat.st_size); // 파일 크기 위치 조정
+            mvwprintw(win, i + 2, getmaxx(win) - 20, "%s", mod_time);             // 수정 시간 오른쪽 끝에 배치
             if (index == highlight) {
                 wattroff(win, COLOR_PAIR(7));
             } else {
@@ -125,7 +124,8 @@ int load_files(char *files[], WINDOW *preview_win) {
 
     dir = opendir(".");
     if (dir == NULL) {
-        display_error("Cannot open current directory.");
+        mvwprintw(preview_win, 1, 1, "Cannot open current directory.");
+        wrefresh(preview_win);
         return -1;
     }
 
@@ -193,7 +193,7 @@ void do_dir(WINDOW *preview_win,const char *filename)
                 }
                 closedir(dir);
             } else {
-                display_error("Cannot opendir: %s", filename);
+                mvwprintw(preview_win, 1, 1, "Cannot opendir: %s", filename);
             }
 }
 
@@ -220,7 +220,7 @@ void do_file(WINDOW *preview_win,const char *filename)
         fclose(file);
     }else {
 
-        display_error( "Cannot open file.");
+        mvwprintw(preview_win, 1, 1, "Cannot open file.");
     }
 }
 
@@ -228,7 +228,8 @@ void more(WINDOW *preview_win, const char *filename)
 {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        display_error("Cannot fopen: %s",filename);
+        mvwprintw(preview_win, 1, 1, "Cannot fopen: %s",filename);
+        wrefresh(preview_win);
         return;
     }
 
@@ -242,7 +243,8 @@ void more(WINDOW *preview_win, const char *filename)
     FILE *fp_tty = fopen("/dev/tty", "r"); // for 사용자 입력
     if (fp_tty == NULL) {
 
-        display_error( "Cannot open: /dev/tty");
+        mvwprintw(preview_win, 1, 1, "Cannot open: /dev/tty");
+        wrefresh(preview_win);
         fclose(file);
         exit(1);
     }
