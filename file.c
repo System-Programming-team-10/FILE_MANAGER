@@ -150,7 +150,6 @@ void cp_file(const char* destination, const char* filepath) {
         fclose(src);
         fclose(dest);
 
-        display_error(menu_win, "Copy completed: %s -> %s", filepath, destination);
     }
 }
 
