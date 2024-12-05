@@ -8,7 +8,7 @@ SRCS = main.c display.c file.c gui.c
 HEADERS = display.h file.h gui.h
 
 # Output executable
-TARGET = my_program
+TARGET = file_manager
 
 # Object files
 OBJS = $(SRCS:.c=.o)
