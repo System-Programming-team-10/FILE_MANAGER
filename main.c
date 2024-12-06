@@ -15,7 +15,7 @@
 
 WINDOW *menu_win;
 WINDOW *path_win;
-WINDOW *left_win;
+WINDOW *list_win;
 WINDOW *preview_win;
 
 // 시그널 블로킹/해제를 위한 함수
@@ -42,7 +42,7 @@ int main() {
 
     menu_win = newwin(1, COLS, 0, 0);
     path_win = newwin(3, COLS, LINES - 3, 0);
-    left_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
+    list_win = newwin(LINES - 4, PANEL_WIDTH, 1, 1);
     preview_win = newwin(LINES - 4, PREVIEW_WIDTH, 1, PANEL_WIDTH + 2);
 
     const char* filename;
@@ -63,10 +63,10 @@ int main() {
     int scroll_offset = 0;
 
     // 초기 강조 표시
-    highlight_window(left_win, 1);  // 좌측 창 강조
+    highlight_window(list_win, 1);  // 좌측 창 강조
     highlight_window(preview_win, 0); // 우측 창 기본 테두리
 
-    display_files(left_win, files, file_count, highlight, scroll_offset);
+    display_files(list_win, files, file_count, highlight, scroll_offset);
     display_preview(preview_win, files[highlight]);
     display_path(path_win, preview_win);
     refresh();
@@ -74,7 +74,7 @@ int main() {
 
     int ch; //키보드 입력
 
-    highlight_window(left_win, 1);  // 좌측 창 활성화
+    highlight_window(list_win, 1);  // 좌측 창 활성화
     highlight_window(preview_win, 0); // 우측 창 비활성화
 
     int file_flag; // 파일 작업 처리를 위한 flag(0: 초기화, 1: move, 2: copy)
@@ -102,7 +102,7 @@ int main() {
             continue; // 입력 처리를 종료하고 다음 입력 대기
         }
 
-        int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT);
+        int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_list || ch == KEY_RIGHT);
         int is_paste_key = (ch == 'p');
 
         // Copy 상태 해제 조건
@@ -122,7 +122,7 @@ int main() {
             file_count = load_files(files, preview_win);
             highlight = 0;  // highlight 초기화
             scroll_offset = 0;  // scrikk_offset 초기화
-            display_files(left_win, files, file_count, highlight, scroll_offset);
+            display_files(list_win, files, file_count, highlight, scroll_offset);
             display_preview(preview_win, files[highlight]);
             display_path(path_win, preview_win);
             refresh();
@@ -141,21 +141,21 @@ int main() {
                 if (highlight < scroll_offset) scroll_offset--;
                 if (highlight < 0) highlight = 0; // highlight 경계값 체크
                 if (scroll_offset < 0) scroll_offset = 0; // scroll_offset 경계값 체크
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
                 break;
 
             case KEY_DOWN:
                 if (highlight < file_count - 1) highlight++;
-                if (highlight >= scroll_offset + getmaxy(left_win) - 3) scroll_offset++;
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                if (highlight >= scroll_offset + getmaxy(list_win) - 3) scroll_offset++;
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 if (highlight >= file_count) highlight = file_count - 1; // highlight 경계값 체크
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
                 break;
 
-            case KEY_LEFT:  // 상위 디렉터리로 이동
+            case KEY_list:  // 상위 디렉터리로 이동
                 chdir("..");
                 for (int i = 0; i < file_count; i++) {
                     free(files[i]);
@@ -163,7 +163,7 @@ int main() {
                 file_count = load_files(files, preview_win);
                 highlight = 0;
                 scroll_offset = 0;
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
                 break;
@@ -180,7 +180,7 @@ int main() {
                             highlight = 0;
                             scroll_offset = 0;
 
-                            display_files(left_win, files, file_count, highlight, scroll_offset);
+                            display_files(list_win, files, file_count, highlight, scroll_offset);
                             display_preview(preview_win, files[highlight]); // 현재 디렉터리 내용 표시
                             display_path(path_win, preview_win);
                         } else {    // 디렉터리 이동 실패하면
@@ -218,7 +218,7 @@ int main() {
 
                 highlight = 0;  // 강조 표시 초기화
                 scroll_offset = 0;  // 스크롤 초기화
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]); // 미리보기 창 갱신
 
                 
@@ -233,7 +233,7 @@ int main() {
                 // 시그널 차단 해제
                 unblock_signals(&oldset);
                 file_count = load_files(files, preview_win);
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]);
                 display_path(path_win, preview_win);
 
@@ -266,7 +266,7 @@ int main() {
 
                 highlight = 0;  // 강조 표시 초기화
                 scroll_offset = 0;  // 스크롤 초기화
-                display_files(left_win, files, file_count, highlight, scroll_offset);
+                display_files(list_win, files, file_count, highlight, scroll_offset);
                 display_preview(preview_win, files[highlight]); // 미리보기 창 갱신
                 break;
 
@@ -297,7 +297,7 @@ int main() {
                         }
                     }
                     file_count = load_files(files, preview_win);
-                    display_files(left_win, files, file_count, highlight, scroll_offset);
+                    display_files(list_win, files, file_count, highlight, scroll_offset);
                     display_preview(preview_win, files[highlight]);
                     display_path(path_win, preview_win);
 
@@ -365,10 +365,10 @@ int main() {
                         wrefresh(preview_win);
                         break;
                     } else { // 일반 파일인 경우 more 기능 실행
-                        highlight_window(left_win, 0);  // 좌측 창 비활성화
+                        highlight_window(list_win, 0);  // 좌측 창 비활성화
                         highlight_window(preview_win, 1); // 우측 창 활성화
                         more(preview_win, files[highlight]);
-                        highlight_window(left_win, 1);  // 좌측 창 활성화
+                        highlight_window(list_win, 1);  // 좌측 창 활성화
                         highlight_window(preview_win, 0); // 우측 창 비활성화
                     }
                 } else {
@@ -380,7 +380,7 @@ int main() {
             
             
 
-    highlight_window(left_win, 1);
+    highlight_window(list_win, 1);
     
     refresh();
     doupdate();
