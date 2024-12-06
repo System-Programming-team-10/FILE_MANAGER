@@ -102,7 +102,7 @@ int main() {
             continue; // 입력 처리를 종료하고 다음 입력 대기
         }
 
-        int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_list || ch == KEY_RIGHT);
+        int is_arrow_key = (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT);
         int is_paste_key = (ch == 'p');
 
         // Copy 상태 해제 조건
@@ -155,7 +155,7 @@ int main() {
                 display_path(path_win, preview_win);
                 break;
 
-            case KEY_list:  // 상위 디렉터리로 이동
+            case KEY_LEFT:  // 상위 디렉터리로 이동
                 chdir("..");
                 for (int i = 0; i < file_count; i++) {
                     free(files[i]);
