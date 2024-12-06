@@ -5,7 +5,7 @@
 
 extern WINDOW *menu_win;
 extern WINDOW *path_win;
-extern WINDOW *left_win;
+extern WINDOW *list_win;
 extern WINDOW *preview_win;
 
 void highlight_window(WINDOW *win, int is_selected);
