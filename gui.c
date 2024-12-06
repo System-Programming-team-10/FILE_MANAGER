@@ -36,7 +36,7 @@ void init_ncurses() {
 void close_ncurses() {
  // window 삭제 및 ncurses 조욜
     delwin(menu_win);
-    delwin(left_win);
+    delwin(list_win);
     delwin(preview_win);
     delwin(path_win);
 
